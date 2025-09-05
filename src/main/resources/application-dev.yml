@@ -1,0 +1,19 @@
+server:
+  servlet:
+    context-path: /service-main
+  port: 8502
+
+spring:
+  application:
+    name: Componente de Promociones
+    version: v1
+    title: Promociones
+
+  datasource:
+    url: jdbc:mysql://localhost/promociones_db
+    username: root
+    password:
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
