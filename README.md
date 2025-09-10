@@ -26,7 +26,7 @@ Este módulo permite la gestión de promociones en la plataforma, incluyendo:
 - PostgreSQL / MySQL / H2 (configurable)  
 - YML Config  
 
-## 📂 Estructura del proyecto
+## 📂 Estructura del repositorio / proyecto
 
 - **main** → Documentación general y contexto del proyecto.  
 - **backend** → Implementación técnica del microservicio en Spring Boot (código, endpoints, ejemplos).  
