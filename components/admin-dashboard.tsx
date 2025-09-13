@@ -1,15 +1,35 @@
-"use client"
+'use client';
 
-import { useState } from "react"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Badge } from "@/components/ui/badge"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
-import { Switch } from "@/components/ui/switch"
+import React, { useState, useEffect } from 'react';
+import { useToast } from './ui/use-toast';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { Switch } from '@/components/ui/switch';
 import {
   Dialog,
   DialogContent,
@@ -17,8 +37,8 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+} from '@/components/ui/dialog';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Store,
   Tag,
@@ -35,476 +55,561 @@ import {
   Clock,
   Save,
   Copy,
-} from "lucide-react"
-import { Header } from "./header"
-import { Footer } from "./footer"
+} from 'lucide-react';
+import { Header } from './header';
+import { Footer } from './footer';
+
+// URL base del backend
+const API_BASE_URL = 'http://localhost:8502/service-main/api/promociones';
+
+// Interface para Promocion (mapea con PromocionDTO del backend)
+interface Promocion {
+  id: number;
+  nombre: string;
+  descripcion: string;
+  tipoPromocion: string;
+  tipoCondicion: string;
+  valorDescuento: number;
+  fechaInicio: string;
+  fechaFin: string;
+  esAcumulable: boolean;
+  estaActiva: boolean;
+}
 
 export function AdminDashboard() {
-  const [activeTab, setActiveTab] = useState("dashboard")
-  const [sidebarOpen, setSidebarOpen] = useState(true)
-  const [showCreatePromotion, setShowCreatePromotion] = useState(false)
-  const [showCreateCoupon, setShowCreateCoupon] = useState(false)
-  const [showCreateCampaign, setShowCreateCampaign] = useState(false)
-  const [editingPromotion, setEditingPromotion] = useState(null)
-  const [editingCoupon, setEditingCoupon] = useState(null)
-  const [editingCampaign, setEditingCampaign] = useState(null)
+  const [activeTab, setActiveTab] = useState('dashboard');
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [showCreatePromotion, setShowCreatePromotion] = useState(false);
+  const [showCreateCoupon, setShowCreateCoupon] = useState(false);
+  const [showCreateCampaign, setShowCreateCampaign] = useState(false);
+  const [editingPromotion, setEditingPromotion] = useState<Promocion | null>(null);
+  const [editingCoupon, setEditingCoupon] = useState<any>(null);
+  const [editingCampaign, setEditingCampaign] = useState<any>(null);
+  const [promociones, setPromociones] = useState<Promocion[]>([]);
+  const { toast } = useToast();
 
+  // Estado del formulario ajustado al PromocionDTO
   const [promotionForm, setPromotionForm] = useState({
-    name: "",
-    description: "",
-    type: "percentage",
-    value: "",
-    minPurchase: "",
-    maxDiscount: "",
-    startDate: "",
-    endDate: "",
-    startTime: "",
-    endTime: "",
-    usageLimit: "",
-    userLimit: "",
-    categories: [],
-    products: [],
-    isActive: true,
-    isStackable: false,
-    requiresCode: false,
-    code: "",
-  })
+    nombre: '',
+    descripcion: '',
+    tipoPromocion: 'DESCUENTO_PORCENTAJE',
+    tipoCondicion: 'MONTO_MINIMO',
+    valorDescuento: '',
+    fechaInicio: '',
+    fechaFin: '',
+    esAcumulable: false,
+    estaActiva: true,
+  });
 
   const [couponForm, setCouponForm] = useState({
-    code: "",
-    description: "",
-    type: "percentage",
-    value: "",
-    minPurchase: "",
-    maxDiscount: "",
-    startDate: "",
-    endDate: "",
-    maxUses: "",
-    userLimit: "",
-    categories: [],
+    code: '',
+    description: '',
+    type: 'percentage',
+    value: '',
+    minPurchase: '',
+    maxDiscount: '',
+    startDate: '',
+    endDate: '',
+    maxUses: '',
+    userLimit: '',
+    categories: [] as string[],
     isActive: true,
     isStackable: false,
-  })
+  });
 
   const [campaignForm, setCampaignForm] = useState({
-    name: "",
-    description: "",
-    startDate: "",
-    endDate: "",
-    budget: "",
-    targetAudience: "",
-    promotions: [],
-    channels: [],
+    name: '',
+    description: '',
+    startDate: '',
+    endDate: '',
+    budget: '',
+    targetAudience: '',
+    promotions: [] as string[],
+    channels: [] as string[],
     isActive: true,
-  })
+  });
 
   const stats = [
     {
-      title: "Promociones Activas",
-      value: "12",
-      change: "+2.5%",
-      changeType: "positive",
+      title: 'Promociones Activas',
+      value: '12',
+      change: '+2.5%',
+      changeType: 'positive',
       icon: Tag,
     },
     {
-      title: "Cupones Utilizados",
-      value: "1,234",
-      change: "+12.3%",
-      changeType: "positive",
+      title: 'Cupones Utilizados',
+      value: '1,234',
+      change: '+12.3%',
+      changeType: 'positive',
       icon: Gift,
     },
     {
-      title: "Campañas en Curso",
-      value: "8",
-      change: "+5.1%",
-      changeType: "positive",
+      title: 'Campañas en Curso',
+      value: '8',
+      change: '+5.1%',
+      changeType: 'positive',
       icon: Calendar,
     },
     {
-      title: "Conversión Total",
-      value: "23.4%",
-      change: "+1.2%",
-      changeType: "positive",
+      title: 'Conversión Total',
+      value: '23.4%',
+      change: '+1.2%',
+      changeType: 'positive',
       icon: TrendingUp,
     },
-  ]
-
-  const [activePromotions, setActivePromotions] = useState([
-    {
-      id: "PROMO001",
-      name: "Descuento Verano 2024",
-      description: "Descuento especial para productos de verano",
-      type: "Porcentaje",
-      discount: "30%",
-      status: "Activa",
-      used: 245,
-      limit: 500,
-      expires: "2024-08-31",
-      startTime: "00:00",
-      endTime: "23:59",
-      categories: ["Ropa", "Accesorios"],
-      minPurchase: "$50",
-      created: "2024-06-01",
-    },
-    {
-      id: "PROMO002",
-      name: "Envío Gratis",
-      description: "Envío gratuito en compras mayores a $100",
-      type: "Envío",
-      discount: "100%",
-      status: "Activa",
-      used: 89,
-      limit: 200,
-      expires: "2024-07-15",
-      startTime: "09:00",
-      endTime: "18:00",
-      categories: ["Todos"],
-      minPurchase: "$100",
-      created: "2024-06-10",
-    },
-    {
-      id: "PROMO003",
-      name: "2x1 Electrónicos",
-      description: "Lleva 2 productos electrónicos y paga solo 1",
-      type: "Cantidad",
-      discount: "50%",
-      status: "Pausada",
-      used: 156,
-      limit: 300,
-      expires: "2024-09-30",
-      startTime: "10:00",
-      endTime: "22:00",
-      categories: ["Electrónicos"],
-      minPurchase: "$0",
-      created: "2024-05-15",
-    },
-    {
-      id: "PROMO004",
-      name: "Primera Compra",
-      description: "Descuento especial para nuevos clientes",
-      type: "Fijo",
-      discount: "$20",
-      status: "Activa",
-      used: 67,
-      limit: 1000,
-      expires: "2024-12-31",
-      startTime: "00:00",
-      endTime: "23:59",
-      categories: ["Todos"],
-      minPurchase: "$30",
-      created: "2024-05-01",
-    },
-  ])
+  ];
 
   const [coupons, setCoupons] = useState([
     {
       id: 1,
-      code: "SUMMER30",
-      discount: "30%",
-      type: "Porcentaje",
+      code: 'SUMMER30',
+      discount: '30%',
+      type: 'Porcentaje',
       uses: 245,
       maxUses: 500,
-      status: "Activo",
-      created: "2024-06-01",
+      status: 'Activo',
+      created: '2024-06-01',
     },
     {
       id: 2,
-      code: "FREESHIP",
-      discount: "Gratis",
-      type: "Envío",
+      code: 'FREESHIP',
+      discount: 'Gratis',
+      type: 'Envío',
       uses: 89,
       maxUses: 200,
-      status: "Activo",
-      created: "2024-06-15",
+      status: 'Activo',
+      created: '2024-06-15',
     },
     {
       id: 3,
-      code: "WELCOME20",
-      discount: "$20",
-      type: "Fijo",
+      code: 'WELCOME20',
+      discount: '$20',
+      type: 'Fijo',
       uses: 67,
       maxUses: 1000,
-      status: "Activo",
-      created: "2024-05-20",
+      status: 'Activo',
+      created: '2024-05-20',
     },
     {
       id: 4,
-      code: "FLASH50",
-      discount: "50%",
-      type: "Porcentaje",
+      code: 'FLASH50',
+      discount: '50%',
+      type: 'Porcentaje',
       uses: 156,
       maxUses: 300,
-      status: "Expirado",
-      created: "2024-05-01",
+      status: 'Expirado',
+      created: '2024-05-01',
     },
-  ])
+  ]);
 
   const [campaigns, setCampaigns] = useState([
     {
       id: 1,
-      name: "Campaña Verano",
-      startDate: "2024-06-01",
-      endDate: "2024-08-31",
-      budget: "$5,000",
-      spent: "$3,200",
+      name: 'Campaña Verano',
+      startDate: '2024-06-01',
+      endDate: '2024-08-31',
+      budget: '$5,000',
+      spent: '$3,200',
       conversions: 245,
-      status: "Activa",
+      status: 'Activa',
     },
     {
       id: 2,
-      name: "Back to School",
-      startDate: "2024-08-01",
-      endDate: "2024-09-15",
-      budget: "$3,000",
-      spent: "$1,800",
+      name: 'Back to School',
+      startDate: '2024-08-01',
+      endDate: '2024-09-15',
+      budget: '$3,000',
+      spent: '$1,800',
       conversions: 156,
-      status: "Programada",
+      status: 'Programada',
     },
     {
       id: 3,
-      name: "Black Friday",
-      startDate: "2024-11-25",
-      endDate: "2024-11-30",
-      budget: "$10,000",
-      spent: "$0",
+      name: 'Black Friday',
+      startDate: '2024-11-25',
+      endDate: '2024-11-30',
+      budget: '$10,000',
+      spent: '$0',
       conversions: 0,
-      status: "Borrador",
+      status: 'Borrador',
     },
-  ])
+  ]);
 
-  const refreshAllData = () => {
-    // Simular actualización de datos después de cambios
-    console.log("[v0] Refreshing all data across sections")
-  }
+  const recentActivity = [
+    { action: 'Nueva promoción "Verano"', time: 'Hace 5 minutos', status: 'Activa', type: 'success' },
+    { action: 'Cupón "FREESHIP" expirado', time: 'Hace 1 hora', status: 'Expirado', type: 'warning' },
+    { action: 'Campaña "Black Friday" creada', time: 'Ayer', status: 'Borrador', type: 'info' },
+  ];
 
-  const handleCreatePromotion = () => {
-    if (editingPromotion) {
-      setActivePromotions(
-        activePromotions.map((p) => (p.id === editingPromotion.id ? { ...editingPromotion, ...promotionForm } : p)),
-      )
-    } else {
-      const newPromotion = {
-        id: Date.now(),
-        ...promotionForm,
-        uses: 0,
-        status: promotionForm.isActive ? "Activa" : "Inactiva",
+  // Fetch promociones del backend
+  const fetchPromociones = async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/activas`, {
+        method: 'GET',
+        credentials: 'include',
+      });
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || `Error ${response.status}: No se pudieron cargar las promociones`);
       }
-      setActivePromotions([...activePromotions, newPromotion])
+      const data = await response.json();
+      setPromociones(data);
+    } catch (error) {
+      console.error('Error fetching promociones:', error);
+      toast({
+        title: 'Error',
+        description: error instanceof Error ? error.message : 'No se pudieron cargar las promociones',
+        variant: 'destructive',
+      });
     }
-    setShowCreatePromotion(false)
-    resetPromotionForm()
-    refreshAllData() // Sincronizar cambios
-  }
+  };
 
-  const handleEditPromotion = (promotion) => {
-    setEditingPromotion(promotion)
+  // Cargar promociones al cambiar a la pestaña de promociones
+  useEffect(() => {
+    if (activeTab === 'promotions') {
+      fetchPromociones();
+    }
+  }, [activeTab]);
+
+  // Crear o actualizar promoción
+  const handleCreatePromotion = async () => {
+    try {
+      // Validar campos requeridos
+      if (!promotionForm.nombre || !promotionForm.valorDescuento || !promotionForm.fechaInicio || !promotionForm.fechaFin) {
+        throw new Error('Por favor, completa todos los campos requeridos');
+      }
+
+      // Convertir fechas al formato yyyy-MM-dd HH:mm:ss para LocalDateTime
+      const fechaInicio = new Date(promotionForm.fechaInicio).toLocaleString('sv-SE', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+      }).replace(' ', 'T');
+
+      const fechaFin = new Date(promotionForm.fechaFin).toLocaleString('sv-SE', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+      }).replace(' ', 'T');
+
+      const payload = {
+        ...promotionForm,
+        valorDescuento: parseFloat(promotionForm.valorDescuento) || 0,
+        fechaInicio,
+        fechaFin,
+      };
+
+      const url = editingPromotion ? `${API_BASE_URL}/${editingPromotion.id}` : API_BASE_URL;
+      const method = editingPromotion ? 'PUT' : 'POST';
+
+      const response = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+        credentials: 'include',
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || `Error ${response.status}: ${editingPromotion ? 'Error al actualizar promoción' : 'Error al crear promoción'}`);
+      }
+
+      toast({
+        title: 'Éxito',
+        description: editingPromotion ? 'Promoción actualizada correctamente' : 'Promoción creada correctamente',
+      });
+
+      setShowCreatePromotion(false);
+      resetPromotionForm();
+      fetchPromociones();
+    } catch (error) {
+      console.error('Error creating/updating promoción:', error);
+      toast({
+        title: 'Error',
+        description: error instanceof Error ? error.message : (editingPromotion ? 'No se pudo actualizar la promoción' : 'No se pudo crear la promoción'),
+        variant: 'destructive',
+      });
+    }
+  };
+
+  // Editar promoción
+  const handleEditPromotion = (promotion: Promocion) => {
+    setEditingPromotion(promotion);
     setPromotionForm({
-      name: promotion.name,
-      description: promotion.description,
-      type:
-        promotion.type === "Porcentaje"
-          ? "percentage"
-          : promotion.type === "Fijo"
-            ? "fixed"
-            : promotion.type === "Envío"
-              ? "shipping"
-              : "quantity",
-      value: promotion.discount.replace(/[%$]/g, ""),
-      minPurchase: promotion.minPurchase.replace("$", ""),
-      maxDiscount: "",
-      startDate: "",
-      endDate: promotion.expires,
-      startTime: promotion.startTime,
-      endTime: promotion.endTime,
-      usageLimit: promotion.limit.toString(),
-      userLimit: "",
-      categories: promotion.categories,
-      products: [],
-      isActive: promotion.status === "Activa",
-      isStackable: false,
-      requiresCode: false,
-      code: "",
-    })
-    setShowCreatePromotion(true)
-  }
+      nombre: promotion.nombre,
+      descripcion: promotion.descripcion,
+      tipoPromocion: promotion.tipoPromocion,
+      tipoCondicion: promotion.tipoCondicion,
+      valorDescuento: promotion.valorDescuento.toString(),
+      fechaInicio: promotion.fechaInicio.split('.')[0],
+      fechaFin: promotion.fechaFin.split('.')[0],
+      esAcumulable: promotion.esAcumulable,
+      estaActiva: promotion.estaActiva,
+    });
+    setShowCreatePromotion(true);
+  };
 
-  const handleDeletePromotion = (id) => {
-    setActivePromotions(activePromotions.filter((p) => p.id !== id))
-    refreshAllData() // Sincronizar cambios
-  }
+  // Eliminar promoción
+  const handleDeletePromotion = async (id: number) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/${id}`, {
+        method: 'DELETE',
+        credentials: 'include',
+      });
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || `Error ${response.status}: Error al eliminar promoción`);
+      }
+      toast({
+        title: 'Éxito',
+        description: 'Promoción eliminada correctamente',
+      });
+      fetchPromociones();
+    } catch (error) {
+      console.error('Error deleting promoción:', error);
+      toast({
+        title: 'Error',
+        description: error instanceof Error ? error.message : 'No se pudo eliminar la promoción',
+        variant: 'destructive',
+      });
+    }
+  };
 
-  const handleTogglePromotionStatus = (promotionId) => {
-    setActivePromotions(
-      activePromotions.map((p) =>
-        p.id === promotionId ? { ...p, status: p.status === "Activa" ? "Pausada" : "Activa" } : p,
-      ),
-    )
-  }
+  // Toglear estado (activa/pausada)
+  const handleTogglePromotionStatus = async (id: number) => {
+    try {
+      const promocion = promociones.find((p) => p.id === id);
+      if (!promocion) return;
 
+      // Convertir fechas al formato yyyy-MM-dd HH:mm:ss para LocalDateTime
+      const fechaInicio = new Date(promocion.fechaInicio).toLocaleString('sv-SE', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+      }).replace(' ', 'T');
+
+      const fechaFin = new Date(promocion.fechaFin).toLocaleString('sv-SE', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+      }).replace(' ', 'T');
+
+      const updatedPromocion = {
+        ...promocion,
+        valorDescuento: parseFloat(promocion.valorDescuento.toString()) || 0,
+        fechaInicio,
+        fechaFin,
+        estaActiva: !promocion.estaActiva,
+      };
+
+      const response = await fetch(`${API_BASE_URL}/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updatedPromocion),
+        credentials: 'include',
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || `Error ${response.status}: Error al actualizar estado`);
+      }
+      toast({
+        title: 'Éxito',
+        description: `Promoción ${updatedPromocion.estaActiva ? 'activada' : 'pausada'} correctamente`,
+      });
+      fetchPromociones();
+    } catch (error) {
+      console.error('Error toggling promoción status:', error);
+      toast({
+        title: 'Error',
+        description: error instanceof Error ? error.message : 'No se pudo actualizar el estado de la promoción',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  // Resetear formulario de promoción
   const resetPromotionForm = () => {
     setPromotionForm({
-      name: "",
-      description: "",
-      type: "percentage",
-      value: "",
-      minPurchase: "",
-      maxDiscount: "",
-      startDate: "",
-      endDate: "",
-      startTime: "",
-      endTime: "",
-      usageLimit: "",
-      userLimit: "",
-      categories: [],
-      products: [],
-      isActive: true,
-      isStackable: false,
-      requiresCode: false,
-      code: "",
-    })
-    setEditingPromotion(null)
-  }
+      nombre: '',
+      descripcion: '',
+      tipoPromocion: 'DESCUENTO_PORCENTAJE',
+      tipoCondicion: 'MONTO_MINIMO',
+      valorDescuento: '',
+      fechaInicio: '',
+      fechaFin: '',
+      esAcumulable: false,
+      estaActiva: true,
+    });
+    setEditingPromotion(null);
+  };
 
+  // Resetear formulario de cupones
   const resetCouponForm = () => {
     setCouponForm({
-      code: "",
-      description: "",
-      type: "percentage",
-      value: "",
-      minPurchase: "",
-      maxDiscount: "",
-      startDate: "",
-      endDate: "",
-      maxUses: "",
-      userLimit: "",
+      code: '',
+      description: '',
+      type: 'percentage',
+      value: '',
+      minPurchase: '',
+      maxDiscount: '',
+      startDate: '',
+      endDate: '',
+      maxUses: '',
+      userLimit: '',
       categories: [],
       isActive: true,
       isStackable: false,
-    })
-    setEditingCoupon(null)
-  }
+    });
+    setEditingCoupon(null);
+  };
 
+  // Crear o actualizar cupón
   const handleCreateCoupon = () => {
     if (editingCoupon) {
-      setCoupons(coupons.map((c) => (c.id === editingCoupon.id ? { ...editingCoupon, ...couponForm } : c)))
+      setCoupons(coupons.map((c) => (c.id === editingCoupon.id ? { ...editingCoupon, ...couponForm } : c)));
     } else {
       const newCoupon = {
         id: Date.now(),
         ...couponForm,
         uses: 0,
-        status: couponForm.isActive ? "Activo" : "Inactivo",
-      }
-      setCoupons([...coupons, newCoupon])
+        status: couponForm.isActive ? 'Activo' : 'Inactivo',
+      };
+      setCoupons([...coupons, newCoupon]);
     }
-    setShowCreateCoupon(false)
-    resetCouponForm()
-    refreshAllData() // Sincronizar cambios
-  }
+    setShowCreateCoupon(false);
+    resetCouponForm();
+    refreshAllData();
+  };
 
-  const handleEditCoupon = (coupon) => {
-    setEditingCoupon(coupon)
+  // Editar cupón
+  const handleEditCoupon = (coupon: any) => {
+    setEditingCoupon(coupon);
     setCouponForm({
       code: coupon.code,
-      description: "",
-      type: coupon.type === "Porcentaje" ? "percentage" : coupon.type === "Fijo" ? "fixed" : "shipping",
-      value: coupon.discount.replace(/[%$]/g, "").replace("Gratis", "0"),
-      minPurchase: "",
-      maxDiscount: "",
-      startDate: "",
-      endDate: "",
+      description: '',
+      type: coupon.type === 'Porcentaje' ? 'percentage' : coupon.type === 'Fijo' ? 'fixed' : 'shipping',
+      value: coupon.discount.replace(/[%$]/g, '').replace('Gratis', '0'),
+      minPurchase: '',
+      maxDiscount: '',
+      startDate: '',
+      endDate: '',
       maxUses: coupon.maxUses.toString(),
-      userLimit: "",
+      userLimit: '',
       categories: [],
-      isActive: coupon.status === "Activo",
+      isActive: coupon.status === 'Activo',
       isStackable: false,
-    })
-    setShowCreateCoupon(true)
-  }
+    });
+    setShowCreateCoupon(true);
+  };
 
-  const handleDeleteCoupon = (id) => {
-    setCoupons(coupons.filter((c) => c.id !== id))
-    refreshAllData() // Sincronizar cambios
-  }
+  // Eliminar cupón
+  const handleDeleteCoupon = (id: number) => {
+    setCoupons(coupons.filter((c) => c.id !== id));
+    refreshAllData();
+  };
 
+  // Resetear formulario de campañas
   const resetCampaignForm = () => {
     setCampaignForm({
-      name: "",
-      description: "",
-      startDate: "",
-      endDate: "",
-      budget: "",
-      targetAudience: "",
+      name: '',
+      description: '',
+      startDate: '',
+      endDate: '',
+      budget: '',
+      targetAudience: '',
       promotions: [],
       channels: [],
       isActive: true,
-    })
-    setEditingCampaign(null)
-  }
+    });
+    setEditingCampaign(null);
+  };
 
+  // Crear o actualizar campaña
   const handleCreateCampaign = () => {
     if (editingCampaign) {
-      setCampaigns(campaigns.map((c) => (c.id === editingCampaign.id ? { ...editingCampaign, ...campaignForm } : c)))
+      setCampaigns(campaigns.map((c) => (c.id === editingCampaign.id ? { ...editingCampaign, ...campaignForm } : c)));
     } else {
       const newCampaign = {
         id: Date.now(),
         ...campaignForm,
-        spent: 0,
-        status: campaignForm.isActive ? "Activa" : "Inactiva",
-      }
-      setCampaigns([...campaigns, newCampaign])
+        spent: '0',
+        status: campaignForm.isActive ? 'Activa' : 'Inactiva',
+      };
+      setCampaigns([...campaigns, newCampaign]);
     }
-    setShowCreateCampaign(false)
-    resetCampaignForm()
-    refreshAllData() // Sincronizar cambios
-  }
+    setShowCreateCampaign(false);
+    resetCampaignForm();
+    refreshAllData();
+  };
 
-  const handleEditCampaign = (campaign) => {
-    setEditingCampaign(campaign)
+  // Editar campaña
+  const handleEditCampaign = (campaign: any) => {
+    setEditingCampaign(campaign);
     setCampaignForm({
       name: campaign.name,
-      description: "",
+      description: '',
       startDate: campaign.startDate,
       endDate: campaign.endDate,
-      budget: campaign.budget.replace("$", "").replace(",", ""),
-      targetAudience: "",
+      budget: campaign.budget.replace('$', '').replace(',', ''),
+      targetAudience: '',
       promotions: [],
       channels: [],
-      isActive: campaign.status === "Activa",
-    })
-    setShowCreateCampaign(true)
-  }
+      isActive: campaign.status === 'Activa',
+    });
+    setShowCreateCampaign(true);
+  };
 
-  const handleDeleteCampaign = (id) => {
-    setCampaigns(campaigns.filter((c) => c.id !== id))
-    refreshAllData() // Sincronizar cambios
-  }
+  // Eliminar campaña
+  const handleDeleteCampaign = (id: number) => {
+    setCampaigns(campaigns.filter((c) => c.id !== id));
+    refreshAllData();
+  };
 
-  const handleToggleCouponStatus = (couponId) => {
+  // Toglear estado de cupón
+  const handleToggleCouponStatus = (couponId: number) => {
     setCoupons(
-      coupons.map((c) => (c.id === couponId ? { ...c, status: c.status === "Activo" ? "Inactivo" : "Activo" } : c)),
-    )
-    refreshAllData() // Sincronizar cambios
-  }
+      coupons.map((c) =>
+        c.id === couponId ? { ...c, status: c.status === 'Activo' ? 'Inactivo' : 'Activo' } : c,
+      ),
+    );
+    refreshAllData();
+  };
 
-  const handleToggleCampaignStatus = (campaignId) => {
+  // Toglear estado de campaña
+  const handleToggleCampaignStatus = (campaignId: number) => {
     setCampaigns(
-      campaigns.map((c) => (c.id === campaignId ? { ...c, status: c.status === "Activa" ? "Pausada" : "Activa" } : c)),
-    )
-    refreshAllData() // Sincronizar cambios
-  }
+      campaigns.map((c) =>
+        c.id === campaignId ? { ...c, status: c.status === 'Activa' ? 'Pausada' : 'Activa' } : c,
+      ),
+    );
+    refreshAllData();
+  };
+
+  // Simular actualización de datos
+  const refreshAllData = () => {
+    console.log('[v0] Refreshing all data across sections');
+  };
 
   const sidebarItems = [
-    { id: "dashboard", label: "Dashboard", icon: BarChart3 },
-    { id: "promotions", label: "Promociones", icon: Tag },
-    { id: "coupons", label: "Cupones", icon: Gift },
-    { id: "campaigns", label: "Campañas", icon: Calendar },
-  ]
-
-  const recentActivity = [
-    { action: "Nueva promoción 'Verano'", time: "Hace 5 minutos", status: "Activa", type: "success" },
-    { action: "Cupón 'FREESHIP' expirado", time: "Hace 1 hora", status: "Expirado", type: "warning" },
-    { action: "Campaña 'Black Friday' creada", time: "Ayer", status: "Borrador", type: "info" },
-  ]
+    { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
+    { id: 'promotions', label: 'Promociones', icon: Tag },
+    { id: 'coupons', label: 'Cupones', icon: Gift },
+    { id: 'campaigns', label: 'Campañas', icon: Calendar },
+  ];
 
   return (
     <div className="flex flex-col h-screen bg-white">
@@ -513,7 +618,7 @@ export function AdminDashboard() {
       <div className="flex flex-1 overflow-hidden">
         {/* Sidebar */}
         <div
-          className={`${sidebarOpen ? "w-64" : "w-16"} transition-all duration-300 bg-slate-900 border-r border-slate-800`}
+          className={`${sidebarOpen ? 'w-64' : 'w-16'} transition-all duration-300 bg-slate-900 border-r border-slate-800`}
         >
           <div className="p-4">
             <div className="flex items-center gap-2 mb-8">
@@ -525,21 +630,21 @@ export function AdminDashboard() {
 
             <nav className="space-y-2">
               {sidebarItems.map((item) => {
-                const Icon = item.icon
+                const Icon = item.icon;
                 return (
                   <button
                     key={item.id}
                     onClick={() => setActiveTab(item.id)}
                     className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-colors ${
                       activeTab === item.id
-                        ? "bg-purple-600 text-white"
-                        : "text-slate-300 hover:bg-slate-800 hover:text-white"
+                        ? 'bg-purple-600 text-white'
+                        : 'text-slate-300 hover:bg-slate-800 hover:text-white'
                     }`}
                   >
                     <Icon className="h-5 w-5" />
                     {sidebarOpen && <span>{item.label}</span>}
                   </button>
-                )
+                );
               })}
             </nav>
           </div>
@@ -547,14 +652,13 @@ export function AdminDashboard() {
 
         {/* Main Content */}
         <div className="flex-1 flex flex-col overflow-hidden">
-          {/* Content */}
           <main className="flex-1 overflow-auto p-6 bg-gray-50">
-            {activeTab === "dashboard" && (
+            {activeTab === 'dashboard' && (
               <div className="space-y-6">
                 {/* Stats Grid */}
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                   {stats.map((stat, index) => {
-                    const Icon = stat.icon
+                    const Icon = stat.icon;
                     return (
                       <Card key={index} className="bg-white border border-gray-200">
                         <CardContent className="p-6">
@@ -570,7 +674,7 @@ export function AdminDashboard() {
                           </div>
                         </CardContent>
                       </Card>
-                    )
+                    );
                   })}
                 </div>
 
@@ -586,44 +690,34 @@ export function AdminDashboard() {
                           <TableHead>Promoción</TableHead>
                           <TableHead>Tipo</TableHead>
                           <TableHead>Descuento</TableHead>
-                          <TableHead>Uso</TableHead>
                           <TableHead>Estado</TableHead>
                           <TableHead>Expira</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {activePromotions.slice(0, 4).map((promo) => (
+                        {promociones.slice(0, 4).map((promo) => (
                           <TableRow key={promo.id}>
                             <TableCell>
                               <div>
-                                <div className="font-medium">{promo.name}</div>
+                                <div className="font-medium">{promo.nombre}</div>
                                 <div className="text-sm text-muted-foreground">{promo.id}</div>
                               </div>
                             </TableCell>
-                            <TableCell>{promo.type}</TableCell>
-                            {/* Cambiando color de descuento de text-primary a text-purple-600 */}
-                            <TableCell className="font-medium text-purple-600">{promo.discount}</TableCell>
-                            <TableCell>
-                              <div className="text-sm">
-                                {promo.used}/{promo.limit}
-                                <div className="w-full bg-secondary rounded-full h-1.5 mt-1">
-                                  <div
-                                    className="bg-purple-600 h-1.5 rounded-full"
-                                    style={{ width: `${(promo.used / promo.limit) * 100}%` }}
-                                  ></div>
-                                </div>
-                              </div>
+                            <TableCell>{promo.tipoPromocion}</TableCell>
+                            <TableCell className="font-medium text-purple-600">
+                              {promo.valorDescuento * 100}%
                             </TableCell>
                             <TableCell>
-                              {/* Cambiando badge de estado a variante purple */}
                               <Badge
-                                variant={promo.status === "Activa" ? "default" : "secondary"}
-                                className={promo.status === "Activa" ? "bg-purple-600 hover:bg-purple-700" : ""}
+                                variant={promo.estaActiva ? 'default' : 'secondary'}
+                                className={promo.estaActiva ? 'bg-purple-600 hover:bg-purple-700' : ''}
                               >
-                                {promo.status}
+                                {promo.estaActiva ? 'Activa' : 'Pausada'}
                               </Badge>
                             </TableCell>
-                            <TableCell className="text-sm">{promo.expires}</TableCell>
+                            <TableCell className="text-sm">
+                              {new Date(promo.fechaFin).toLocaleDateString()}
+                            </TableCell>
                           </TableRow>
                         ))}
                       </TableBody>
@@ -647,7 +741,7 @@ export function AdminDashboard() {
                             <p className="text-xs text-gray-500">{activity.time}</p>
                           </div>
                           <Badge
-                            variant={activity.type === "success" ? "default" : "secondary"}
+                            variant={activity.type === 'success' ? 'default' : 'secondary'}
                             className="bg-purple-100 text-purple-800"
                           >
                             {activity.status}
@@ -660,7 +754,7 @@ export function AdminDashboard() {
               </div>
             )}
 
-            {activeTab === "promotions" && (
+            {activeTab === 'promotions' && (
               <div className="space-y-6">
                 <div className="flex justify-between items-center">
                   <h3 className="text-2xl font-bold text-gray-900">Gestión de Promociones</h3>
@@ -704,71 +798,64 @@ export function AdminDashboard() {
                           <TableHead>Tipo</TableHead>
                           <TableHead>Descuento</TableHead>
                           <TableHead>Horario</TableHead>
-                          <TableHead>Progreso</TableHead>
                           <TableHead>Estado</TableHead>
                           <TableHead>Expira</TableHead>
                           <TableHead className="text-right">Acciones</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {activePromotions.map((promo) => (
+                        {promociones.map((promo) => (
                           <TableRow key={promo.id}>
                             <TableCell>
                               <div>
-                                <div className="font-medium">{promo.name}</div>
-                                <div className="text-sm text-muted-foreground">{promo.description}</div>
-                                <div className="text-xs text-muted-foreground mt-1">
-                                  Min: {promo.minPurchase} • {promo.categories.join(", ")}
-                                </div>
+                                <div className="font-medium">{promo.nombre}</div>
+                                <div className="text-sm text-muted-foreground">{promo.descripcion}</div>
                               </div>
                             </TableCell>
                             <TableCell>
-                              <Badge variant="outline">{promo.type}</Badge>
+                              <Badge variant="outline">{promo.tipoPromocion}</Badge>
                             </TableCell>
-                            {/* Cambiando color de descuento de text-primary a text-purple-600 */}
-                            <TableCell className="font-medium text-purple-600">{promo.discount}</TableCell>
+                            <TableCell className="font-medium text-purple-600">
+                              {promo.valorDescuento * 100}%
+                            </TableCell>
                             <TableCell>
                               <div className="flex items-center gap-1 text-sm">
                                 <Clock className="h-3 w-3" />
-                                {promo.startTime} - {promo.endTime}
-                              </div>
-                            </TableCell>
-                            <TableCell>
-                              <div className="space-y-1">
-                                <div className="text-sm font-medium">
-                                  {promo.used}/{promo.limit}
-                                </div>
-                                <div className="w-full bg-secondary rounded-full h-2">
-                                  <div
-                                    className="bg-purple-600 h-2 rounded-full transition-all"
-                                    style={{ width: `${(promo.used / promo.limit) * 100}%` }}
-                                  ></div>
-                                </div>
+                                {new Date(promo.fechaInicio).toLocaleTimeString()} -{' '}
+                                {new Date(promo.fechaFin).toLocaleTimeString()}
                               </div>
                             </TableCell>
                             <TableCell>
                               <Badge
-                                variant={promo.status === "Activa" ? "default" : "secondary"}
+                                variant={promo.estaActiva ? 'default' : 'secondary'}
                                 className={
-                                  promo.status === "Activa"
-                                    ? "bg-purple-600 hover:bg-purple-700 cursor-pointer"
-                                    : "cursor-pointer"
+                                  promo.estaActiva
+                                    ? 'bg-purple-600 hover:bg-purple-700 cursor-pointer'
+                                    : 'cursor-pointer'
                                 }
                                 onClick={() => handleTogglePromotionStatus(promo.id)}
                               >
-                                {promo.status}
+                                {promo.estaActiva ? 'Activa' : 'Pausada'}
                               </Badge>
                             </TableCell>
-                            <TableCell>{promo.expires}</TableCell>
+                            <TableCell>{new Date(promo.fechaFin).toLocaleDateString()}</TableCell>
                             <TableCell className="text-right">
                               <div className="flex items-center justify-end gap-2">
                                 <Button variant="ghost" size="sm">
                                   <Eye className="h-4 w-4" />
                                 </Button>
-                                <Button variant="ghost" size="sm" onClick={() => handleEditPromotion(promo)}>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleEditPromotion(promo)}
+                                >
                                   <Edit className="h-4 w-4" />
                                 </Button>
-                                <Button variant="ghost" size="sm" onClick={() => handleDeletePromotion(promo.id)}>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleDeletePromotion(promo.id)}
+                                >
                                   <Trash2 className="h-4 w-4" />
                                 </Button>
                               </div>
@@ -782,7 +869,7 @@ export function AdminDashboard() {
               </div>
             )}
 
-            {activeTab === "coupons" && (
+            {activeTab === 'coupons' && (
               <div className="space-y-6">
                 <div className="flex justify-between items-center">
                   <h3 className="text-2xl font-bold text-gray-900">Gestión de Cupones</h3>
@@ -795,7 +882,6 @@ export function AdminDashboard() {
                   </Button>
                 </div>
 
-                {/* Coupons Header */}
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-4">
                     <div className="relative">
@@ -809,7 +895,6 @@ export function AdminDashboard() {
                   </div>
                 </div>
 
-                {/* Coupons Table */}
                 <Card>
                   <CardContent className="p-0">
                     <Table>
@@ -831,7 +916,6 @@ export function AdminDashboard() {
                             <TableCell>
                               <Badge variant="outline">{coupon.type}</Badge>
                             </TableCell>
-                            {/* Cambiando color de descuento de text-primary a text-purple-600 */}
                             <TableCell className="font-medium text-purple-600">{coupon.discount}</TableCell>
                             <TableCell>
                               <div className="space-y-1">
@@ -848,11 +932,11 @@ export function AdminDashboard() {
                             </TableCell>
                             <TableCell>
                               <Badge
-                                variant={coupon.status === "Activo" ? "default" : "destructive"}
+                                variant={coupon.status === 'Activo' ? 'default' : 'destructive'}
                                 className={
-                                  coupon.status === "Activo"
-                                    ? "bg-purple-500 hover:bg-purple-600 cursor-pointer"
-                                    : "cursor-pointer"
+                                  coupon.status === 'Activo'
+                                    ? 'bg-purple-500 hover:bg-purple-600 cursor-pointer'
+                                    : 'cursor-pointer'
                                 }
                                 onClick={() => handleToggleCouponStatus(coupon.id)}
                               >
@@ -882,7 +966,7 @@ export function AdminDashboard() {
               </div>
             )}
 
-            {activeTab === "campaigns" && (
+            {activeTab === 'campaigns' && (
               <div className="space-y-6">
                 <div className="flex justify-between items-center">
                   <h3 className="text-2xl font-bold text-gray-900">Gestión de Campañas</h3>
@@ -895,7 +979,6 @@ export function AdminDashboard() {
                   </Button>
                 </div>
 
-                {/* Campaigns Header */}
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-4">
                     <div className="relative">
@@ -916,7 +999,6 @@ export function AdminDashboard() {
                   </div>
                 </div>
 
-                {/* Campaigns Table */}
                 <Card>
                   <CardContent className="p-0">
                     <Table>
@@ -945,13 +1027,18 @@ export function AdminDashboard() {
                             <TableCell>
                               <div className="space-y-1">
                                 <div className="text-sm">
-                                  ${campaign.spent.toLocaleString()} / ${campaign.budget.replace(/[$,]/g, "")}
+                                  {campaign.spent} / {campaign.budget}
                                 </div>
                                 <div className="w-full bg-secondary rounded-full h-1.5">
                                   <div
                                     className="bg-purple-500 h-1.5 rounded-full"
                                     style={{
-                                      width: `${Math.min((campaign.spent / Number.parseInt(campaign.budget.replace(/[$,]/g, ""))) * 100, 100)}%`,
+                                      width: `${Math.min(
+                                        (parseFloat(campaign.spent.replace(/[$,]/g, '')) /
+                                          parseFloat(campaign.budget.replace(/[$,]/g, ''))) *
+                                          100,
+                                        100,
+                                      )}%`,
                                     }}
                                   ></div>
                                 </div>
@@ -960,11 +1047,11 @@ export function AdminDashboard() {
                             <TableCell className="text-center">{campaign.conversions}</TableCell>
                             <TableCell>
                               <Badge
-                                variant={campaign.status === "Activa" ? "default" : "secondary"}
+                                variant={campaign.status === 'Activa' ? 'default' : 'secondary'}
                                 className={
-                                  campaign.status === "Activa"
-                                    ? "bg-purple-500 hover:bg-purple-600 cursor-pointer"
-                                    : "cursor-pointer"
+                                  campaign.status === 'Activa'
+                                    ? 'bg-purple-500 hover:bg-purple-600 cursor-pointer'
+                                    : 'cursor-pointer'
                                 }
                                 onClick={() => handleToggleCampaignStatus(campaign.id)}
                               >
@@ -997,7 +1084,7 @@ export function AdminDashboard() {
               <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto bg-white border-2 border-purple-200">
                 <DialogHeader>
                   <DialogTitle className="text-slate-800">
-                    {editingPromotion ? "Editar Promoción" : "Crear Nueva Promoción"}
+                    {editingPromotion ? 'Editar Promoción' : 'Crear Nueva Promoción'}
                   </DialogTitle>
                   <DialogDescription className="text-slate-600">
                     Configura todos los detalles de tu promoción incluyendo fechas, horarios y condiciones.
@@ -1005,7 +1092,7 @@ export function AdminDashboard() {
                 </DialogHeader>
 
                 <Tabs defaultValue="basic" className="w-full bg-white">
-                  <TabsList className="grid w-full grid-cols-4 bg-purple-50">
+                  <TabsList className="grid w-full grid-cols-3 bg-purple-50">
                     <TabsTrigger
                       value="basic"
                       className="data-[state=active]:bg-purple-600 data-[state=active]:text-white"
@@ -1024,210 +1111,132 @@ export function AdminDashboard() {
                     >
                       Horarios
                     </TabsTrigger>
-                    <TabsTrigger
-                      value="advanced"
-                      className="data-[state=active]:bg-purple-600 data-[state=active]:text-white"
-                    >
-                      Avanzado
-                    </TabsTrigger>
                   </TabsList>
 
                   <TabsContent value="basic" className="space-y-4 bg-white p-4 rounded-lg">
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
-                        <Label htmlFor="name">Nombre de la Promoción</Label>
+                        <Label htmlFor="nombre">Nombre de la Promoción</Label>
                         <Input
-                          id="name"
-                          value={promotionForm.name}
-                          onChange={(e) => setPromotionForm({ ...promotionForm, name: e.target.value })}
+                          id="nombre"
+                          value={promotionForm.nombre}
+                          onChange={(e) => setPromotionForm({ ...promotionForm, nombre: e.target.value })}
                           placeholder="Ej: Descuento Verano 2024"
+                          required
                         />
                       </div>
                       <div className="space-y-2">
-                        <Label htmlFor="type">Tipo de Descuento</Label>
+                        <Label htmlFor="tipoPromocion">Tipo de Promoción</Label>
                         <Select
-                          value={promotionForm.type}
-                          onValueChange={(value) => setPromotionForm({ ...promotionForm, type: value })}
+                          value={promotionForm.tipoPromocion}
+                          onValueChange={(value) => setPromotionForm({ ...promotionForm, tipoPromocion: value })}
                         >
                           <SelectTrigger>
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="percentage">Porcentaje (%)</SelectItem>
-                            <SelectItem value="fixed">Monto Fijo ($)</SelectItem>
-                            <SelectItem value="shipping">Envío Gratis</SelectItem>
-                            <SelectItem value="quantity">Por Cantidad (2x1, 3x2)</SelectItem>
+                            <SelectItem value="DESCUENTO_PORCENTAJE">Porcentaje (%)</SelectItem>
+                            <SelectItem value="DESCUENTO_MONTO_FIJO">Monto Fijo ($)</SelectItem>
+                            <SelectItem value="DOS_POR_UNO">2x1</SelectItem>
+                            <SelectItem value="TRES_POR_DOS">3x2</SelectItem>
+                            <SelectItem value="ENVIO_GRATIS">Envío Gratis</SelectItem>
+                            <SelectItem value="REGALO_PRODUCTO">Regalo de Producto</SelectItem>
+                            <SelectItem value="CASHBACK">Cashback</SelectItem>
                           </SelectContent>
                         </Select>
                       </div>
                     </div>
 
                     <div className="space-y-2">
-                      <Label htmlFor="description">Descripción</Label>
+                      <Label htmlFor="descripcion">Descripción</Label>
                       <Textarea
-                        id="description"
-                        value={promotionForm.description}
-                        onChange={(e) => setPromotionForm({ ...promotionForm, description: e.target.value })}
+                        id="descripcion"
+                        value={promotionForm.descripcion}
+                        onChange={(e) => setPromotionForm({ ...promotionForm, descripcion: e.target.value })}
                         placeholder="Describe los detalles de la promoción..."
                         rows={3}
                       />
                     </div>
 
-                    <div className="grid grid-cols-3 gap-4">
+                    <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
-                        <Label htmlFor="value">Valor del Descuento</Label>
+                        <Label htmlFor="valorDescuento">Valor del Descuento</Label>
                         <Input
-                          id="value"
+                          id="valorDescuento"
                           type="number"
-                          value={promotionForm.value}
-                          onChange={(e) => setPromotionForm({ ...promotionForm, value: e.target.value })}
-                          placeholder={promotionForm.type === "percentage" ? "30" : "20"}
+                          step="0.01"
+                          value={promotionForm.valorDescuento}
+                          onChange={(e) => setPromotionForm({ ...promotionForm, valorDescuento: e.target.value })}
+                          placeholder="30"
+                          required
                         />
                       </div>
                       <div className="space-y-2">
-                        <Label htmlFor="minPurchase">Compra Mínima ($)</Label>
-                        <Input
-                          id="minPurchase"
-                          type="number"
-                          value={promotionForm.minPurchase}
-                          onChange={(e) => setPromotionForm({ ...promotionForm, minPurchase: e.target.value })}
-                          placeholder="50"
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="maxDiscount">Descuento Máximo ($)</Label>
-                        <Input
-                          id="maxDiscount"
-                          type="number"
-                          value={promotionForm.maxDiscount}
-                          onChange={(e) => setPromotionForm({ ...promotionForm, maxDiscount: e.target.value })}
-                          placeholder="100"
-                        />
+                        <Label htmlFor="tipoCondicion">Tipo de Condición</Label>
+                        <Select
+                          value={promotionForm.tipoCondicion}
+                          onValueChange={(value) => setPromotionForm({ ...promotionForm, tipoCondicion: value })}
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="MONTO_MINIMO">Monto Mínimo de Compra</SelectItem>
+                            <SelectItem value="CANTIDAD_PRODUCTOS">Cantidad Mínima de Productos</SelectItem>
+                            <SelectItem value="CATEGORIA_ESPECIFICA">Categoría Específica</SelectItem>
+                            <SelectItem value="PRODUCTO_ESPECIFICO">Producto Específico</SelectItem>
+                            <SelectItem value="PRIMER_COMPRA">Primera Compra del Usuario</SelectItem>
+                            <SelectItem value="CLIENTE_VIP">Solo Clientes VIP</SelectItem>
+                            <SelectItem value="DIA_SEMANA">Día de la Semana Específico</SelectItem>
+                            <SelectItem value="HORA_ESPECIFICA">Horario Específico</SelectItem>
+                            <SelectItem value="SIN_CONDICION">Sin Condición Especial</SelectItem>
+                            <SelectItem value="POR_HORA">Por Hora</SelectItem>
+                          </SelectContent>
+                        </Select>
                       </div>
                     </div>
                   </TabsContent>
 
                   <TabsContent value="conditions" className="space-y-4 bg-white p-4 rounded-lg">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="usageLimit">Límite de Usos Total</Label>
-                        <Input
-                          id="usageLimit"
-                          type="number"
-                          value={promotionForm.usageLimit}
-                          onChange={(e) => setPromotionForm({ ...promotionForm, usageLimit: e.target.value })}
-                          placeholder="500"
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="userLimit">Límite por Usuario</Label>
-                        <Input
-                          id="userLimit"
-                          type="number"
-                          value={promotionForm.userLimit}
-                          onChange={(e) => setPromotionForm({ ...promotionForm, userLimit: e.target.value })}
-                          placeholder="1"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label>Categorías Aplicables</Label>
-                      <div className="grid grid-cols-3 gap-2">
-                        {["Ropa", "Electrónicos", "Hogar", "Deportes", "Libros", "Juguetes"].map((category) => (
-                          <div key={category} className="flex items-center space-x-2">
-                            <input
-                              type="checkbox"
-                              id={category}
-                              checked={promotionForm.categories.includes(category)}
-                              onChange={(e) => {
-                                if (e.target.checked) {
-                                  setPromotionForm({
-                                    ...promotionForm,
-                                    categories: [...promotionForm.categories, category],
-                                  })
-                                } else {
-                                  setPromotionForm({
-                                    ...promotionForm,
-                                    categories: promotionForm.categories.filter((c) => c !== category),
-                                  })
-                                }
-                              }}
-                            />
-                            <Label htmlFor={category} className="text-sm">
-                              {category}
-                            </Label>
-                          </div>
-                        ))}
-                      </div>
+                    <div className="flex items-center space-x-2">
+                      <Switch
+                        id="esAcumulable"
+                        checked={promotionForm.esAcumulable}
+                        onCheckedChange={(checked) => setPromotionForm({ ...promotionForm, esAcumulable: checked })}
+                      />
+                      <Label htmlFor="esAcumulable">Permitir combinar con otras promociones</Label>
                     </div>
 
                     <div className="flex items-center space-x-2">
                       <Switch
-                        id="requiresCode"
-                        checked={promotionForm.requiresCode}
-                        onCheckedChange={(checked) => setPromotionForm({ ...promotionForm, requiresCode: checked })}
+                        id="estaActiva"
+                        checked={promotionForm.estaActiva}
+                        onCheckedChange={(checked) => setPromotionForm({ ...promotionForm, estaActiva: checked })}
                       />
-                      <Label htmlFor="requiresCode">Requiere Código de Cupón</Label>
+                      <Label htmlFor="estaActiva">Activar promoción inmediatamente</Label>
                     </div>
-
-                    {promotionForm.requiresCode && (
-                      <div className="space-y-2">
-                        <Label htmlFor="code">Código del Cupón</Label>
-                        <div className="flex gap-2">
-                          <Input
-                            id="code"
-                            value={promotionForm.code}
-                            onChange={(e) => setPromotionForm({ ...promotionForm, code: e.target.value.toUpperCase() })}
-                            placeholder="VERANO30"
-                          />
-                          <Button variant="outline" size="sm">
-                            <Copy className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </div>
-                    )}
                   </TabsContent>
 
                   <TabsContent value="schedule" className="space-y-4 bg-white p-4 rounded-lg">
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
-                        <Label htmlFor="startDate">Fecha de Inicio</Label>
+                        <Label htmlFor="fechaInicio">Fecha y Hora de Inicio</Label>
                         <Input
-                          id="startDate"
-                          type="date"
-                          value={promotionForm.startDate}
-                          onChange={(e) => setPromotionForm({ ...promotionForm, startDate: e.target.value })}
+                          id="fechaInicio"
+                          type="datetime-local"
+                          value={promotionForm.fechaInicio}
+                          onChange={(e) => setPromotionForm({ ...promotionForm, fechaInicio: e.target.value })}
+                          required
                         />
                       </div>
                       <div className="space-y-2">
-                        <Label htmlFor="endDate">Fecha de Fin</Label>
+                        <Label htmlFor="fechaFin">Fecha y Hora de Fin</Label>
                         <Input
-                          id="endDate"
-                          type="date"
-                          value={promotionForm.endDate}
-                          onChange={(e) => setPromotionForm({ ...promotionForm, endDate: e.target.value })}
-                        />
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="startTime">Hora de Inicio</Label>
-                        <Input
-                          id="startTime"
-                          type="time"
-                          value={promotionForm.startTime}
-                          onChange={(e) => setPromotionForm({ ...promotionForm, startTime: e.target.value })}
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="endTime">Hora de Fin</Label>
-                        <Input
-                          id="endTime"
-                          type="time"
-                          value={promotionForm.endTime}
-                          onChange={(e) => setPromotionForm({ ...promotionForm, endTime: e.target.value })}
+                          id="fechaFin"
+                          type="datetime-local"
+                          value={promotionForm.fechaFin}
+                          onChange={(e) => setPromotionForm({ ...promotionForm, fechaFin: e.target.value })}
+                          required
                         />
                       </div>
                     </div>
@@ -1237,69 +1246,14 @@ export function AdminDashboard() {
                       <div className="flex items-center gap-2 text-sm text-muted-foreground">
                         <Calendar className="h-4 w-4" />
                         <span>
-                          {promotionForm.startDate || "Fecha inicio"} - {promotionForm.endDate || "Fecha fin"}
+                          {promotionForm.fechaInicio
+                            ? new Date(promotionForm.fechaInicio).toLocaleString()
+                            : 'Fecha inicio'}{' '}
+                          -{' '}
+                          {promotionForm.fechaFin
+                            ? new Date(promotionForm.fechaFin).toLocaleString()
+                            : 'Fecha fin'}
                         </span>
-                      </div>
-                      <div className="flex items-center gap-2 text-sm text-muted-foreground mt-1">
-                        <Clock className="h-4 w-4" />
-                        <span>
-                          {promotionForm.startTime || "00:00"} - {promotionForm.endTime || "23:59"}
-                        </span>
-                      </div>
-                    </div>
-                  </TabsContent>
-
-                  <TabsContent value="advanced" className="space-y-4 bg-white p-4 rounded-lg">
-                    <div className="space-y-4">
-                      <div className="flex items-center space-x-2">
-                        <Switch
-                          id="isActive"
-                          checked={promotionForm.isActive}
-                          onCheckedChange={(checked) => setPromotionForm({ ...promotionForm, isActive: checked })}
-                        />
-                        <Label htmlFor="isActive">Activar promoción inmediatamente</Label>
-                      </div>
-
-                      <div className="flex items-center space-x-2">
-                        <Switch
-                          id="isStackable"
-                          checked={promotionForm.isStackable}
-                          onCheckedChange={(checked) => setPromotionForm({ ...promotionForm, isStackable: checked })}
-                        />
-                        <Label htmlFor="isStackable">Permitir combinar con otras promociones</Label>
-                      </div>
-                    </div>
-
-                    <div className="p-4 bg-purple-50 rounded-lg border border-purple-200">
-                      <h4 className="font-medium mb-2 text-slate-800">Resumen de la Promoción</h4>
-                      <div className="space-y-2 text-sm">
-                        <div>
-                          <strong>Nombre:</strong> {promotionForm.name || "Sin nombre"}
-                        </div>
-                        <div>
-                          <strong>Tipo:</strong>{" "}
-                          {promotionForm.type === "percentage"
-                            ? "Porcentaje"
-                            : promotionForm.type === "fixed"
-                              ? "Monto Fijo"
-                              : promotionForm.type === "shipping"
-                                ? "Envío Gratis"
-                                : "Por Cantidad"}
-                        </div>
-                        <div>
-                          <strong>Descuento:</strong> {promotionForm.value}
-                          {promotionForm.type === "percentage" ? "%" : promotionForm.type === "fixed" ? "$" : ""}
-                        </div>
-                        <div>
-                          <strong>Compra mínima:</strong> ${promotionForm.minPurchase || "0"}
-                        </div>
-                        <div>
-                          <strong>Límite de usos:</strong> {promotionForm.usageLimit || "Sin límite"}
-                        </div>
-                        <div>
-                          <strong>Categorías:</strong>{" "}
-                          {promotionForm.categories.length > 0 ? promotionForm.categories.join(", ") : "Todas"}
-                        </div>
                       </div>
                     </div>
                   </TabsContent>
@@ -1309,15 +1263,15 @@ export function AdminDashboard() {
                   <Button
                     variant="outline"
                     onClick={() => {
-                      setShowCreatePromotion(false)
-                      resetPromotionForm()
+                      setShowCreatePromotion(false);
+                      resetPromotionForm();
                     }}
                   >
                     Cancelar
                   </Button>
                   <Button onClick={handleCreatePromotion}>
                     <Save className="h-4 w-4 mr-2" />
-                    {editingPromotion ? "Guardar Cambios" : "Crear Promoción"}
+                    {editingPromotion ? 'Guardar Cambios' : 'Crear Promoción'}
                   </Button>
                 </DialogFooter>
               </DialogContent>
@@ -1327,7 +1281,7 @@ export function AdminDashboard() {
               <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto bg-white border-2 border-purple-200">
                 <DialogHeader>
                   <DialogTitle className="text-slate-800">
-                    {editingCoupon ? "Editar Cupón" : "Crear Nuevo Cupón"}
+                    {editingCoupon ? 'Editar Cupón' : 'Crear Nuevo Cupón'}
                   </DialogTitle>
                   <DialogDescription className="text-slate-600">
                     Configura los detalles del cupón incluyendo código, descuento y condiciones de uso.
@@ -1376,7 +1330,7 @@ export function AdminDashboard() {
                         <Label htmlFor="couponType">Tipo de Descuento</Label>
                         <Select
                           value={couponForm.type}
-                          onChange={(value) => setCouponForm({ ...couponForm, type: value })}
+                          onValueChange={(value) => setCouponForm({ ...couponForm, type: value })}
                         >
                           <SelectTrigger>
                             <SelectValue />
@@ -1409,7 +1363,7 @@ export function AdminDashboard() {
                           type="number"
                           value={couponForm.value}
                           onChange={(e) => setCouponForm({ ...couponForm, value: e.target.value })}
-                          placeholder={couponForm.type === "percentage" ? "30" : "20"}
+                          placeholder={couponForm.type === 'percentage' ? '30' : '20'}
                         />
                       </div>
                       <div className="space-y-2">
@@ -1462,7 +1416,7 @@ export function AdminDashboard() {
                     <div className="space-y-2">
                       <Label>Categorías Aplicables</Label>
                       <div className="grid grid-cols-3 gap-2">
-                        {["Ropa", "Electrónicos", "Hogar", "Deportes", "Libros", "Juguetes"].map((category) => (
+                        {['Ropa', 'Electrónicos', 'Hogar', 'Deportes', 'Libros', 'Juguetes'].map((category) => (
                           <div key={category} className="flex items-center space-x-2">
                             <input
                               type="checkbox"
@@ -1470,12 +1424,12 @@ export function AdminDashboard() {
                               checked={couponForm.categories.includes(category)}
                               onChange={(e) => {
                                 if (e.target.checked) {
-                                  setCouponForm({ ...couponForm, categories: [...couponForm.categories, category] })
+                                  setCouponForm({ ...couponForm, categories: [...couponForm.categories, category] });
                                 } else {
                                   setCouponForm({
                                     ...couponForm,
                                     categories: couponForm.categories.filter((c) => c !== category),
-                                  })
+                                  });
                                 }
                               }}
                             />
@@ -1491,7 +1445,7 @@ export function AdminDashboard() {
                       <Switch
                         id="couponStackable"
                         checked={couponForm.isStackable}
-                        onChange={(checked) => setCouponForm({ ...couponForm, isStackable: checked })}
+                        onCheckedChange={(checked) => setCouponForm({ ...couponForm, isStackable: checked })}
                       />
                       <Label htmlFor="couponStackable">Permitir combinar con otras promociones</Label>
                     </div>
@@ -1523,7 +1477,7 @@ export function AdminDashboard() {
                       <Switch
                         id="couponActive"
                         checked={couponForm.isActive}
-                        onChange={(checked) => setCouponForm({ ...couponForm, isActive: checked })}
+                        onCheckedChange={(checked) => setCouponForm({ ...couponForm, isActive: checked })}
                       />
                       <Label htmlFor="couponActive">Activar cupón inmediatamente</Label>
                     </div>
@@ -1534,15 +1488,15 @@ export function AdminDashboard() {
                   <Button
                     variant="outline"
                     onClick={() => {
-                      setShowCreateCoupon(false)
-                      resetCouponForm()
+                      setShowCreateCoupon(false);
+                      resetCouponForm();
                     }}
                   >
                     Cancelar
                   </Button>
                   <Button onClick={handleCreateCoupon}>
                     <Save className="h-4 w-4 mr-2" />
-                    {editingCoupon ? "Guardar Cambios" : "Crear Cupón"}
+                    {editingCoupon ? 'Guardar Cambios' : 'Crear Cupón'}
                   </Button>
                 </DialogFooter>
               </DialogContent>
@@ -1552,11 +1506,10 @@ export function AdminDashboard() {
               <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto bg-white border-2 border-purple-200">
                 <DialogHeader>
                   <DialogTitle className="text-slate-800">
-                    {editingCampaign ? "Editar Campaña" : "Crear Nueva Campaña"}
+                    {editingCampaign ? 'Editar Campaña' : 'Crear Nueva Campaña'}
                   </DialogTitle>
                   <DialogDescription className="text-slate-600">
-                    Configura los detalles de la campaña promocional incluyendo fechas, presupuesto y audiencia
-                    objetivo.
+                    Configura los detalles de la campaña promocional incluyendo fechas, presupuesto y audiencia objetivo.
                   </DialogDescription>
                 </DialogHeader>
 
@@ -1641,7 +1594,7 @@ export function AdminDashboard() {
                     <div className="space-y-2">
                       <Label>Canales de Marketing</Label>
                       <div className="grid grid-cols-2 gap-2">
-                        {["Email", "Redes Sociales", "Google Ads", "Facebook Ads", "Influencers", "Banner Web"].map(
+                        {['Email', 'Redes Sociales', 'Google Ads', 'Facebook Ads', 'Influencers', 'Banner Web'].map(
                           (channel) => (
                             <div key={channel} className="flex items-center space-x-2">
                               <input
@@ -1650,12 +1603,12 @@ export function AdminDashboard() {
                                 checked={campaignForm.channels.includes(channel)}
                                 onChange={(e) => {
                                   if (e.target.checked) {
-                                    setCampaignForm({ ...campaignForm, channels: [...campaignForm.channels, channel] })
+                                    setCampaignForm({ ...campaignForm, channels: [...campaignForm.channels, channel] });
                                   } else {
                                     setCampaignForm({
                                       ...campaignForm,
                                       channels: campaignForm.channels.filter((c) => c !== channel),
-                                    })
+                                    });
                                   }
                                 }}
                               />
@@ -1674,7 +1627,7 @@ export function AdminDashboard() {
                       <Label htmlFor="campaignAudience">Audiencia Objetivo</Label>
                       <Select
                         value={campaignForm.targetAudience}
-                        onChange={(value) => setCampaignForm({ ...campaignForm, targetAudience: value })}
+                        onValueChange={(value) => setCampaignForm({ ...campaignForm, targetAudience: value })}
                       >
                         <SelectTrigger>
                           <SelectValue placeholder="Selecciona audiencia" />
@@ -1692,7 +1645,7 @@ export function AdminDashboard() {
                       <Switch
                         id="campaignActive"
                         checked={campaignForm.isActive}
-                        onChange={(checked) => setCampaignForm({ ...campaignForm, isActive: checked })}
+                        onCheckedChange={(checked) => setCampaignForm({ ...campaignForm, isActive: checked })}
                       />
                       <Label htmlFor="campaignActive">Activar campaña inmediatamente</Label>
                     </div>
@@ -1703,15 +1656,15 @@ export function AdminDashboard() {
                   <Button
                     variant="outline"
                     onClick={() => {
-                      setShowCreateCampaign(false)
-                      resetCampaignForm()
+                      setShowCreateCampaign(false);
+                      resetCampaignForm();
                     }}
                   >
                     Cancelar
                   </Button>
                   <Button onClick={handleCreateCampaign}>
                     <Save className="h-4 w-4 mr-2" />
-                    {editingCampaign ? "Guardar Cambios" : "Crear Campaña"}
+                    {editingCampaign ? 'Guardar Cambios' : 'Crear Campaña'}
                   </Button>
                 </DialogFooter>
               </DialogContent>
@@ -1722,5 +1675,5 @@ export function AdminDashboard() {
 
       <Footer />
     </div>
-  )
+  );
 }
