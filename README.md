@@ -1,4 +1,4 @@
-[# 🎯 Microservicio de Promociones (Backend)
+# 🎯 Microservicio de Promociones (Backend)
 
 Este proyecto implementa el **microservicio de promociones** utilizando **Spring Boot**.Se encarga de la gestión completa de promociones: creación, actualización, validación y consulta.
 
