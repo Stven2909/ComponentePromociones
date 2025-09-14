@@ -74,6 +74,17 @@ public class PromocionServiceImpl implements PromocionService {
                 .collect(Collectors.toList());
     }
 
+    @Override
+    public long contarPromocionesActivas() {
+        //Usar el metodo del repositorio
+        return promocionRepository.countByEstaActivaTrue();
+    }
+
+    @Override
+    public long contarCuponesUtilizados() {
+        return 1234; //valor de ejemplo, hasta que se haga el CuponesRepository
+    }
+
     /**
      * Convierte un PromocionDTO a una entidad
      */

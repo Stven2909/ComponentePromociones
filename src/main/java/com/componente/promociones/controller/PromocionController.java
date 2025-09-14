@@ -1,5 +1,6 @@
 package com.componente.promociones.controller;
 
+import com.componente.promociones.model.dto.DashboardStatsDTO;
 import com.componente.promociones.model.dto.PromocionDTO;
 import com.componente.promociones.model.dto.entity.Promocion;
 import com.componente.promociones.service.PromocionService;
@@ -61,6 +62,18 @@ public class PromocionController {
     public ResponseEntity<Void> eliminarPromocion(@PathVariable Long id){
         promocionService.eliminarPromocion(id);
         return ResponseEntity.noContent().build();
+    }
+
+    /**
+     * Endpoint para obtener las estadisticas del dashboard
+     */
+    @GetMapping("/stats")
+    public ResponseEntity<DashboardStatsDTO> obtenerEstadisticasDashboard(){
+        long promocionesActivas = promocionService.contarPromocionesActivas();
+        long cuponesUtilizados = promocionService.contarCuponesUtilizados();
+
+        DashboardStatsDTO stats = new DashboardStatsDTO(promocionesActivas, cuponesUtilizados);
+        return ResponseEntity.ok(stats);
     }
 }
 

@@ -36,4 +36,9 @@ public interface PromocionRepository extends JpaRepository<Promocion, Long> {
      * Busca promociones por nombre (contiene)
      */
     List<Promocion> findByNombreContainingIgnoreCase(String nombre);
+
+    /**
+     * Cuenta las promociones activas
+     */
+    long countByEstaActivaTrue();
 }

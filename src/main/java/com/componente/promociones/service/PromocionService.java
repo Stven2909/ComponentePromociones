@@ -13,4 +13,6 @@ public interface PromocionService {
     void eliminarPromocion(Long id);
 
     List<PromocionDTO> listarPromocionesActivas();
+    long contarPromocionesActivas();
+    long contarCuponesUtilizados();
 }
