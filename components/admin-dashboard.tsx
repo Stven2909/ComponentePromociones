@@ -129,36 +129,13 @@ export function AdminDashboard() {
     isActive: true,
   });
 
-  const stats = [
-    {
-      title: 'Promociones Activas',
-      value: '12',
-      change: '+2.5%',
-      changeType: 'positive',
-      icon: Tag,
-    },
-    {
-      title: 'Cupones Utilizados',
-      value: '1,234',
-      change: '+12.3%',
-      changeType: 'positive',
-      icon: Gift,
-    },
-    {
-      title: 'Campañas en Curso',
-      value: '8',
-      change: '+5.1%',
-      changeType: 'positive',
-      icon: Calendar,
-    },
-    {
-      title: 'Conversión Total',
-      value: '23.4%',
-      change: '+1.2%',
-      changeType: 'positive',
-      icon: TrendingUp,
-    },
-  ];
+  // 👇🏼 AQUI EMPIEZAN LOS CAMBIOS
+  const [dashboardStats, setDashboardStats] = useState([]);
+  const [loadingStats, setLoadingStats] = useState(true);
+  const [errorStats, setErrorStats] = useState(null);
+  
+  // Borra la constante `stats` que tenías aquí
+  // const stats = [ ... ];
 
   const [coupons, setCoupons] = useState([
     {
@@ -265,10 +242,63 @@ export function AdminDashboard() {
     }
   };
 
+  // 👇🏼 NUEVO CODIGO PARA CARGAR LAS ESTADISTICAS
+  const fetchDashboardStats = async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/stats`);
+      if (!response.ok) {
+        throw new Error('Error al obtener las estadísticas del dashboard');
+      }
+      const data = await response.json();
+
+      const formattedStats = [
+        {
+          title: 'Promociones Activas',
+          value: data.promocionesActivas.toString(),
+          change: '+2.5%',
+          changeType: 'positive',
+          icon: Tag,
+        },
+        {
+          title: 'Cupones Utilizados',
+          value: data.cuponesUtilizados.toString(),
+          change: '+12.3%',
+          changeType: 'positive',
+          icon: Gift,
+        },
+        {
+          title: 'Campañas en Curso',
+          value: '8',
+          change: '+5.1%',
+          changeType: 'positive',
+          icon: Calendar,
+        },
+        {
+          title: 'Conversión Total',
+          value: '23.4%',
+          change: '+1.2%',
+          changeType: 'positive',
+          icon: TrendingUp,
+        },
+      ];
+
+      setDashboardStats(formattedStats);
+    } catch (error) {
+      console.error('Error fetching dashboard stats:', error);
+      setErrorStats(error.message);
+    } finally {
+      setLoadingStats(false);
+    }
+  };
+
   // Cargar promociones al cambiar a la pestaña de promociones
   useEffect(() => {
     if (activeTab === 'promotions') {
       fetchPromociones();
+    }
+    // 👇🏼 NUEVO useEffect para cargar las estadisticas
+    if (activeTab === 'dashboard') {
+      fetchDashboardStats();
     }
   }, [activeTab]);
 
@@ -602,6 +632,7 @@ export function AdminDashboard() {
   // Simular actualización de datos
   const refreshAllData = () => {
     console.log('[v0] Refreshing all data across sections');
+    fetchDashboardStats(); // También refrescamos las estadísticas cuando se actualiza la data
   };
 
   const sidebarItems = [
@@ -656,28 +687,35 @@ export function AdminDashboard() {
             {activeTab === 'dashboard' && (
               <div className="space-y-6">
                 {/* Stats Grid */}
+                {/* 👇🏼 AQUI ESTÁ EL CAMBIO EN EL RENDERIZADO */}
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                  {stats.map((stat, index) => {
-                    const Icon = stat.icon;
-                    return (
-                      <Card key={index} className="bg-white border border-gray-200">
-                        <CardContent className="p-6">
-                          <div className="flex items-center justify-between">
-                            <div>
-                              <p className="text-sm font-medium text-gray-600">{stat.title}</p>
-                              <p className="text-2xl font-bold text-gray-900">{stat.value}</p>
-                              <p className="text-sm text-purple-400 mt-1">{stat.change} Este mes</p>
+                  {loadingStats ? (
+                    <p>Cargando estadísticas...</p>
+                  ) : errorStats ? (
+                    <p className="text-red-500">Error: {errorStats}</p>
+                  ) : (
+                    dashboardStats.map((stat, index) => {
+                      const Icon = stat.icon;
+                      return (
+                        <Card key={index} className="bg-white border border-gray-200">
+                          <CardContent className="p-6">
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <p className="text-sm font-medium text-gray-600">{stat.title}</p>
+                                <p className="text-2xl font-bold text-gray-900">{stat.value}</p>
+                                <p className="text-sm text-purple-400 mt-1">{stat.change} Este mes</p>
+                              </div>
+                              <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
+                                <Icon className="h-6 w-6 text-purple-600" />
+                              </div>
                             </div>
-                            <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
-                              <Icon className="h-6 w-6 text-purple-600" />
-                            </div>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    );
-                  })}
+                          </CardContent>
+                        </Card>
+                      );
+                    })
+                  )}
                 </div>
-
+                
                 <Card>
                   <CardHeader>
                     <CardTitle>Promociones Activas</CardTitle>
@@ -922,39 +960,6 @@ export function AdminDashboard() {
                                 <div className="text-sm">
                                   {coupon.uses}/{coupon.maxUses}
                                 </div>
-                                <div className="w-full bg-secondary rounded-full h-1.5">
-                                  <div
-                                    className="bg-purple-600 h-1.5 rounded-full"
-                                    style={{ width: `${(coupon.uses / coupon.maxUses) * 100}%` }}
-                                  ></div>
-                                </div>
-                              </div>
-                            </TableCell>
-                            <TableCell>
-                              <Badge
-                                variant={coupon.status === 'Activo' ? 'default' : 'destructive'}
-                                className={
-                                  coupon.status === 'Activo'
-                                    ? 'bg-purple-500 hover:bg-purple-600 cursor-pointer'
-                                    : 'cursor-pointer'
-                                }
-                                onClick={() => handleToggleCouponStatus(coupon.id)}
-                              >
-                                {coupon.status}
-                              </Badge>
-                            </TableCell>
-                            <TableCell>{coupon.created}</TableCell>
-                            <TableCell className="text-right">
-                              <div className="flex items-center justify-end gap-2">
-                                <Button variant="ghost" size="sm">
-                                  <Eye className="h-4 w-4" />
-                                </Button>
-                                <Button variant="ghost" size="sm" onClick={() => handleEditCoupon(coupon)}>
-                                  <Edit className="h-4 w-4" />
-                                </Button>
-                                <Button variant="ghost" size="sm" onClick={() => handleDeleteCoupon(coupon.id)}>
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
                               </div>
                             </TableCell>
                           </TableRow>
@@ -965,715 +970,10 @@ export function AdminDashboard() {
                 </Card>
               </div>
             )}
-
-            {activeTab === 'campaigns' && (
-              <div className="space-y-6">
-                <div className="flex justify-between items-center">
-                  <h3 className="text-2xl font-bold text-gray-900">Gestión de Campañas</h3>
-                  <Button
-                    onClick={() => setShowCreateCampaign(true)}
-                    className="bg-purple-600 hover:bg-purple-700 text-white"
-                  >
-                    <Plus className="h-4 w-4 mr-2" />
-                    Nueva Campaña
-                  </Button>
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-4">
-                    <div className="relative">
-                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                      <Input placeholder="Buscar campañas..." className="pl-10 w-80" />
-                    </div>
-                    <Select defaultValue="all">
-                      <SelectTrigger className="w-40">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">Todas</SelectItem>
-                        <SelectItem value="active">Activas</SelectItem>
-                        <SelectItem value="scheduled">Programadas</SelectItem>
-                        <SelectItem value="draft">Borradores</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-
-                <Card>
-                  <CardContent className="p-0">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Campaña</TableHead>
-                          <TableHead>Período</TableHead>
-                          <TableHead>Presupuesto</TableHead>
-                          <TableHead>Gastado</TableHead>
-                          <TableHead>Conversiones</TableHead>
-                          <TableHead>Estado</TableHead>
-                          <TableHead className="text-right">Acciones</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {campaigns.map((campaign) => (
-                          <TableRow key={campaign.id}>
-                            <TableCell className="font-medium">{campaign.name}</TableCell>
-                            <TableCell>
-                              <div className="text-sm">
-                                <div>{campaign.startDate}</div>
-                                <div className="text-muted-foreground">{campaign.endDate}</div>
-                              </div>
-                            </TableCell>
-                            <TableCell className="font-medium">{campaign.budget}</TableCell>
-                            <TableCell>
-                              <div className="space-y-1">
-                                <div className="text-sm">
-                                  {campaign.spent} / {campaign.budget}
-                                </div>
-                                <div className="w-full bg-secondary rounded-full h-1.5">
-                                  <div
-                                    className="bg-purple-500 h-1.5 rounded-full"
-                                    style={{
-                                      width: `${Math.min(
-                                        (parseFloat(campaign.spent.replace(/[$,]/g, '')) /
-                                          parseFloat(campaign.budget.replace(/[$,]/g, ''))) *
-                                          100,
-                                        100,
-                                      )}%`,
-                                    }}
-                                  ></div>
-                                </div>
-                              </div>
-                            </TableCell>
-                            <TableCell className="text-center">{campaign.conversions}</TableCell>
-                            <TableCell>
-                              <Badge
-                                variant={campaign.status === 'Activa' ? 'default' : 'secondary'}
-                                className={
-                                  campaign.status === 'Activa'
-                                    ? 'bg-purple-500 hover:bg-purple-600 cursor-pointer'
-                                    : 'cursor-pointer'
-                                }
-                                onClick={() => handleToggleCampaignStatus(campaign.id)}
-                              >
-                                {campaign.status}
-                              </Badge>
-                            </TableCell>
-                            <TableCell className="text-right">
-                              <div className="flex items-center justify-end gap-2">
-                                <Button variant="ghost" size="sm">
-                                  <Eye className="h-4 w-4" />
-                                </Button>
-                                <Button variant="ghost" size="sm" onClick={() => handleEditCampaign(campaign)}>
-                                  <Edit className="h-4 w-4" />
-                                </Button>
-                                <Button variant="ghost" size="sm" onClick={() => handleDeleteCampaign(campaign.id)}>
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
-                              </div>
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </CardContent>
-                </Card>
-              </div>
-            )}
-
-            <Dialog open={showCreatePromotion} onOpenChange={setShowCreatePromotion}>
-              <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto bg-white border-2 border-purple-200">
-                <DialogHeader>
-                  <DialogTitle className="text-slate-800">
-                    {editingPromotion ? 'Editar Promoción' : 'Crear Nueva Promoción'}
-                  </DialogTitle>
-                  <DialogDescription className="text-slate-600">
-                    Configura todos los detalles de tu promoción incluyendo fechas, horarios y condiciones.
-                  </DialogDescription>
-                </DialogHeader>
-
-                <Tabs defaultValue="basic" className="w-full bg-white">
-                  <TabsList className="grid w-full grid-cols-3 bg-purple-50">
-                    <TabsTrigger
-                      value="basic"
-                      className="data-[state=active]:bg-purple-600 data-[state=active]:text-white"
-                    >
-                      Básico
-                    </TabsTrigger>
-                    <TabsTrigger
-                      value="conditions"
-                      className="data-[state=active]:bg-purple-600 data-[state=active]:text-white"
-                    >
-                      Condiciones
-                    </TabsTrigger>
-                    <TabsTrigger
-                      value="schedule"
-                      className="data-[state=active]:bg-purple-600 data-[state=active]:text-white"
-                    >
-                      Horarios
-                    </TabsTrigger>
-                  </TabsList>
-
-                  <TabsContent value="basic" className="space-y-4 bg-white p-4 rounded-lg">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="nombre">Nombre de la Promoción</Label>
-                        <Input
-                          id="nombre"
-                          value={promotionForm.nombre}
-                          onChange={(e) => setPromotionForm({ ...promotionForm, nombre: e.target.value })}
-                          placeholder="Ej: Descuento Verano 2024"
-                          required
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="tipoPromocion">Tipo de Promoción</Label>
-                        <Select
-                          value={promotionForm.tipoPromocion}
-                          onValueChange={(value) => setPromotionForm({ ...promotionForm, tipoPromocion: value })}
-                        >
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="DESCUENTO_PORCENTAJE">Porcentaje (%)</SelectItem>
-                            <SelectItem value="DESCUENTO_MONTO_FIJO">Monto Fijo ($)</SelectItem>
-                            <SelectItem value="DOS_POR_UNO">2x1</SelectItem>
-                            <SelectItem value="TRES_POR_DOS">3x2</SelectItem>
-                            <SelectItem value="ENVIO_GRATIS">Envío Gratis</SelectItem>
-                            <SelectItem value="REGALO_PRODUCTO">Regalo de Producto</SelectItem>
-                            <SelectItem value="CASHBACK">Cashback</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="descripcion">Descripción</Label>
-                      <Textarea
-                        id="descripcion"
-                        value={promotionForm.descripcion}
-                        onChange={(e) => setPromotionForm({ ...promotionForm, descripcion: e.target.value })}
-                        placeholder="Describe los detalles de la promoción..."
-                        rows={3}
-                      />
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="valorDescuento">Valor del Descuento</Label>
-                        <Input
-                          id="valorDescuento"
-                          type="number"
-                          step="0.01"
-                          value={promotionForm.valorDescuento}
-                          onChange={(e) => setPromotionForm({ ...promotionForm, valorDescuento: e.target.value })}
-                          placeholder="30"
-                          required
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="tipoCondicion">Tipo de Condición</Label>
-                        <Select
-                          value={promotionForm.tipoCondicion}
-                          onValueChange={(value) => setPromotionForm({ ...promotionForm, tipoCondicion: value })}
-                        >
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="MONTO_MINIMO">Monto Mínimo de Compra</SelectItem>
-                            <SelectItem value="CANTIDAD_PRODUCTOS">Cantidad Mínima de Productos</SelectItem>
-                            <SelectItem value="CATEGORIA_ESPECIFICA">Categoría Específica</SelectItem>
-                            <SelectItem value="PRODUCTO_ESPECIFICO">Producto Específico</SelectItem>
-                            <SelectItem value="PRIMER_COMPRA">Primera Compra del Usuario</SelectItem>
-                            <SelectItem value="CLIENTE_VIP">Solo Clientes VIP</SelectItem>
-                            <SelectItem value="DIA_SEMANA">Día de la Semana Específico</SelectItem>
-                            <SelectItem value="HORA_ESPECIFICA">Horario Específico</SelectItem>
-                            <SelectItem value="SIN_CONDICION">Sin Condición Especial</SelectItem>
-                            <SelectItem value="POR_HORA">Por Hora</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </div>
-                  </TabsContent>
-
-                  <TabsContent value="conditions" className="space-y-4 bg-white p-4 rounded-lg">
-                    <div className="flex items-center space-x-2">
-                      <Switch
-                        id="esAcumulable"
-                        checked={promotionForm.esAcumulable}
-                        onCheckedChange={(checked) => setPromotionForm({ ...promotionForm, esAcumulable: checked })}
-                      />
-                      <Label htmlFor="esAcumulable">Permitir combinar con otras promociones</Label>
-                    </div>
-
-                    <div className="flex items-center space-x-2">
-                      <Switch
-                        id="estaActiva"
-                        checked={promotionForm.estaActiva}
-                        onCheckedChange={(checked) => setPromotionForm({ ...promotionForm, estaActiva: checked })}
-                      />
-                      <Label htmlFor="estaActiva">Activar promoción inmediatamente</Label>
-                    </div>
-                  </TabsContent>
-
-                  <TabsContent value="schedule" className="space-y-4 bg-white p-4 rounded-lg">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="fechaInicio">Fecha y Hora de Inicio</Label>
-                        <Input
-                          id="fechaInicio"
-                          type="datetime-local"
-                          value={promotionForm.fechaInicio}
-                          onChange={(e) => setPromotionForm({ ...promotionForm, fechaInicio: e.target.value })}
-                          required
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="fechaFin">Fecha y Hora de Fin</Label>
-                        <Input
-                          id="fechaFin"
-                          type="datetime-local"
-                          value={promotionForm.fechaFin}
-                          onChange={(e) => setPromotionForm({ ...promotionForm, fechaFin: e.target.value })}
-                          required
-                        />
-                      </div>
-                    </div>
-
-                    <div className="p-4 bg-purple-50 rounded-lg border border-purple-200">
-                      <h4 className="font-medium mb-2 text-slate-800">Vista Previa del Horario</h4>
-                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                        <Calendar className="h-4 w-4" />
-                        <span>
-                          {promotionForm.fechaInicio
-                            ? new Date(promotionForm.fechaInicio).toLocaleString()
-                            : 'Fecha inicio'}{' '}
-                          -{' '}
-                          {promotionForm.fechaFin
-                            ? new Date(promotionForm.fechaFin).toLocaleString()
-                            : 'Fecha fin'}
-                        </span>
-                      </div>
-                    </div>
-                  </TabsContent>
-                </Tabs>
-
-                <DialogFooter className="bg-white pt-4">
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      setShowCreatePromotion(false);
-                      resetPromotionForm();
-                    }}
-                  >
-                    Cancelar
-                  </Button>
-                  <Button onClick={handleCreatePromotion}>
-                    <Save className="h-4 w-4 mr-2" />
-                    {editingPromotion ? 'Guardar Cambios' : 'Crear Promoción'}
-                  </Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
-
-            <Dialog open={showCreateCoupon} onOpenChange={setShowCreateCoupon}>
-              <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto bg-white border-2 border-purple-200">
-                <DialogHeader>
-                  <DialogTitle className="text-slate-800">
-                    {editingCoupon ? 'Editar Cupón' : 'Crear Nuevo Cupón'}
-                  </DialogTitle>
-                  <DialogDescription className="text-slate-600">
-                    Configura los detalles del cupón incluyendo código, descuento y condiciones de uso.
-                  </DialogDescription>
-                </DialogHeader>
-
-                <Tabs defaultValue="basic" className="w-full bg-white">
-                  <TabsList className="grid w-full grid-cols-3 bg-purple-50">
-                    <TabsTrigger
-                      value="basic"
-                      className="data-[state=active]:bg-purple-600 data-[state=active]:text-white"
-                    >
-                      Básico
-                    </TabsTrigger>
-                    <TabsTrigger
-                      value="conditions"
-                      className="data-[state=active]:bg-purple-600 data-[state=active]:text-white"
-                    >
-                      Condiciones
-                    </TabsTrigger>
-                    <TabsTrigger
-                      value="schedule"
-                      className="data-[state=active]:bg-purple-600 data-[state=active]:text-white"
-                    >
-                      Horarios
-                    </TabsTrigger>
-                  </TabsList>
-
-                  <TabsContent value="basic" className="space-y-4 bg-white p-4 rounded-lg">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="couponCode">Código del Cupón</Label>
-                        <div className="flex gap-2">
-                          <Input
-                            id="couponCode"
-                            value={couponForm.code}
-                            onChange={(e) => setCouponForm({ ...couponForm, code: e.target.value.toUpperCase() })}
-                            placeholder="VERANO30"
-                          />
-                          <Button variant="outline" size="sm">
-                            <Copy className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="couponType">Tipo de Descuento</Label>
-                        <Select
-                          value={couponForm.type}
-                          onValueChange={(value) => setCouponForm({ ...couponForm, type: value })}
-                        >
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="percentage">Porcentaje (%)</SelectItem>
-                            <SelectItem value="fixed">Monto Fijo ($)</SelectItem>
-                            <SelectItem value="shipping">Envío Gratis</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="couponDescription">Descripción</Label>
-                      <Textarea
-                        id="couponDescription"
-                        value={couponForm.description}
-                        onChange={(e) => setCouponForm({ ...couponForm, description: e.target.value })}
-                        placeholder="Describe el cupón..."
-                        rows={3}
-                      />
-                    </div>
-
-                    <div className="grid grid-cols-3 gap-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="couponValue">Valor del Descuento</Label>
-                        <Input
-                          id="couponValue"
-                          type="number"
-                          value={couponForm.value}
-                          onChange={(e) => setCouponForm({ ...couponForm, value: e.target.value })}
-                          placeholder={couponForm.type === 'percentage' ? '30' : '20'}
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="couponMinPurchase">Compra Mínima ($)</Label>
-                        <Input
-                          id="couponMinPurchase"
-                          type="number"
-                          value={couponForm.minPurchase}
-                          onChange={(e) => setCouponForm({ ...couponForm, minPurchase: e.target.value })}
-                          placeholder="50"
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="couponMaxDiscount">Descuento Máximo ($)</Label>
-                        <Input
-                          id="couponMaxDiscount"
-                          type="number"
-                          value={couponForm.maxDiscount}
-                          onChange={(e) => setCouponForm({ ...couponForm, maxDiscount: e.target.value })}
-                          placeholder="100"
-                        />
-                      </div>
-                    </div>
-                  </TabsContent>
-
-                  <TabsContent value="conditions" className="space-y-4 bg-white p-4 rounded-lg">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="couponMaxUses">Límite de Usos Total</Label>
-                        <Input
-                          id="couponMaxUses"
-                          type="number"
-                          value={couponForm.maxUses}
-                          onChange={(e) => setCouponForm({ ...couponForm, maxUses: e.target.value })}
-                          placeholder="500"
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="couponUserLimit">Límite por Usuario</Label>
-                        <Input
-                          id="couponUserLimit"
-                          type="number"
-                          value={couponForm.userLimit}
-                          onChange={(e) => setCouponForm({ ...couponForm, userLimit: e.target.value })}
-                          placeholder="1"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label>Categorías Aplicables</Label>
-                      <div className="grid grid-cols-3 gap-2">
-                        {['Ropa', 'Electrónicos', 'Hogar', 'Deportes', 'Libros', 'Juguetes'].map((category) => (
-                          <div key={category} className="flex items-center space-x-2">
-                            <input
-                              type="checkbox"
-                              id={`coupon-${category}`}
-                              checked={couponForm.categories.includes(category)}
-                              onChange={(e) => {
-                                if (e.target.checked) {
-                                  setCouponForm({ ...couponForm, categories: [...couponForm.categories, category] });
-                                } else {
-                                  setCouponForm({
-                                    ...couponForm,
-                                    categories: couponForm.categories.filter((c) => c !== category),
-                                  });
-                                }
-                              }}
-                            />
-                            <Label htmlFor={`coupon-${category}`} className="text-sm">
-                              {category}
-                            </Label>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div className="flex items-center space-x-2">
-                      <Switch
-                        id="couponStackable"
-                        checked={couponForm.isStackable}
-                        onCheckedChange={(checked) => setCouponForm({ ...couponForm, isStackable: checked })}
-                      />
-                      <Label htmlFor="couponStackable">Permitir combinar con otras promociones</Label>
-                    </div>
-                  </TabsContent>
-
-                  <TabsContent value="schedule" className="space-y-4 bg-white p-4 rounded-lg">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="couponStartDate">Fecha de Inicio</Label>
-                        <Input
-                          id="couponStartDate"
-                          type="date"
-                          value={couponForm.startDate}
-                          onChange={(e) => setCouponForm({ ...couponForm, startDate: e.target.value })}
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="couponEndDate">Fecha de Fin</Label>
-                        <Input
-                          id="couponEndDate"
-                          type="date"
-                          value={couponForm.endDate}
-                          onChange={(e) => setCouponForm({ ...couponForm, endDate: e.target.value })}
-                        />
-                      </div>
-                    </div>
-
-                    <div className="flex items-center space-x-2">
-                      <Switch
-                        id="couponActive"
-                        checked={couponForm.isActive}
-                        onCheckedChange={(checked) => setCouponForm({ ...couponForm, isActive: checked })}
-                      />
-                      <Label htmlFor="couponActive">Activar cupón inmediatamente</Label>
-                    </div>
-                  </TabsContent>
-                </Tabs>
-
-                <DialogFooter className="bg-white pt-4">
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      setShowCreateCoupon(false);
-                      resetCouponForm();
-                    }}
-                  >
-                    Cancelar
-                  </Button>
-                  <Button onClick={handleCreateCoupon}>
-                    <Save className="h-4 w-4 mr-2" />
-                    {editingCoupon ? 'Guardar Cambios' : 'Crear Cupón'}
-                  </Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
-
-            <Dialog open={showCreateCampaign} onOpenChange={setShowCreateCampaign}>
-              <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto bg-white border-2 border-purple-200">
-                <DialogHeader>
-                  <DialogTitle className="text-slate-800">
-                    {editingCampaign ? 'Editar Campaña' : 'Crear Nueva Campaña'}
-                  </DialogTitle>
-                  <DialogDescription className="text-slate-600">
-                    Configura los detalles de la campaña promocional incluyendo fechas, presupuesto y audiencia objetivo.
-                  </DialogDescription>
-                </DialogHeader>
-
-                <Tabs defaultValue="basic" className="w-full bg-white">
-                  <TabsList className="grid w-full grid-cols-3 bg-purple-50">
-                    <TabsTrigger
-                      value="basic"
-                      className="data-[state=active]:bg-purple-600 data-[state=active]:text-white"
-                    >
-                      Básico
-                    </TabsTrigger>
-                    <TabsTrigger
-                      value="budget"
-                      className="data-[state=active]:bg-purple-600 data-[state=active]:text-white"
-                    >
-                      Presupuesto
-                    </TabsTrigger>
-                    <TabsTrigger
-                      value="targeting"
-                      className="data-[state=active]:bg-purple-600 data-[state=active]:text-white"
-                    >
-                      Audiencia
-                    </TabsTrigger>
-                  </TabsList>
-
-                  <TabsContent value="basic" className="space-y-4 bg-white p-4 rounded-lg">
-                    <div className="space-y-2">
-                      <Label htmlFor="campaignName">Nombre de la Campaña</Label>
-                      <Input
-                        id="campaignName"
-                        value={campaignForm.name}
-                        onChange={(e) => setCampaignForm({ ...campaignForm, name: e.target.value })}
-                        placeholder="Ej: Campaña Verano 2024"
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="campaignDescription">Descripción</Label>
-                      <Textarea
-                        id="campaignDescription"
-                        value={campaignForm.description}
-                        onChange={(e) => setCampaignForm({ ...campaignForm, description: e.target.value })}
-                        placeholder="Describe los objetivos y detalles de la campaña..."
-                        rows={3}
-                      />
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="campaignStartDate">Fecha de Inicio</Label>
-                        <Input
-                          id="campaignStartDate"
-                          type="date"
-                          value={campaignForm.startDate}
-                          onChange={(e) => setCampaignForm({ ...campaignForm, startDate: e.target.value })}
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="campaignEndDate">Fecha de Fin</Label>
-                        <Input
-                          id="campaignEndDate"
-                          type="date"
-                          value={campaignForm.endDate}
-                          onChange={(e) => setCampaignForm({ ...campaignForm, endDate: e.target.value })}
-                        />
-                      </div>
-                    </div>
-                  </TabsContent>
-
-                  <TabsContent value="budget" className="space-y-4 bg-white p-4 rounded-lg">
-                    <div className="space-y-2">
-                      <Label htmlFor="campaignBudget">Presupuesto Total ($)</Label>
-                      <Input
-                        id="campaignBudget"
-                        type="number"
-                        value={campaignForm.budget}
-                        onChange={(e) => setCampaignForm({ ...campaignForm, budget: e.target.value })}
-                        placeholder="5000"
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label>Canales de Marketing</Label>
-                      <div className="grid grid-cols-2 gap-2">
-                        {['Email', 'Redes Sociales', 'Google Ads', 'Facebook Ads', 'Influencers', 'Banner Web'].map(
-                          (channel) => (
-                            <div key={channel} className="flex items-center space-x-2">
-                              <input
-                                type="checkbox"
-                                id={`campaign-${channel}`}
-                                checked={campaignForm.channels.includes(channel)}
-                                onChange={(e) => {
-                                  if (e.target.checked) {
-                                    setCampaignForm({ ...campaignForm, channels: [...campaignForm.channels, channel] });
-                                  } else {
-                                    setCampaignForm({
-                                      ...campaignForm,
-                                      channels: campaignForm.channels.filter((c) => c !== channel),
-                                    });
-                                  }
-                                }}
-                              />
-                              <Label htmlFor={`campaign-${channel}`} className="text-sm">
-                                {channel}
-                              </Label>
-                            </div>
-                          ),
-                        )}
-                      </div>
-                    </div>
-                  </TabsContent>
-
-                  <TabsContent value="targeting" className="space-y-4 bg-white p-4 rounded-lg">
-                    <div className="space-y-2">
-                      <Label htmlFor="campaignAudience">Audiencia Objetivo</Label>
-                      <Select
-                        value={campaignForm.targetAudience}
-                        onValueChange={(value) => setCampaignForm({ ...campaignForm, targetAudience: value })}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Selecciona audiencia" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="all">Todos los usuarios</SelectItem>
-                          <SelectItem value="new">Nuevos clientes</SelectItem>
-                          <SelectItem value="returning">Clientes recurrentes</SelectItem>
-                          <SelectItem value="vip">Clientes VIP</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    <div className="flex items-center space-x-2">
-                      <Switch
-                        id="campaignActive"
-                        checked={campaignForm.isActive}
-                        onCheckedChange={(checked) => setCampaignForm({ ...campaignForm, isActive: checked })}
-                      />
-                      <Label htmlFor="campaignActive">Activar campaña inmediatamente</Label>
-                    </div>
-                  </TabsContent>
-                </Tabs>
-
-                <DialogFooter className="bg-white pt-4">
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      setShowCreateCampaign(false);
-                      resetCampaignForm();
-                    }}
-                  >
-                    Cancelar
-                  </Button>
-                  <Button onClick={handleCreateCampaign}>
-                    <Save className="h-4 w-4 mr-2" />
-                    {editingCampaign ? 'Guardar Cambios' : 'Crear Campaña'}
-                  </Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
+            {/* Resto de tu código */}
           </main>
         </div>
       </div>
-
-      <Footer />
     </div>
   );
 }
