@@ -22,9 +22,12 @@ configurations {
 //Aqui hay que moverle
 repositories {
 	mavenCentral()
+	maven {url 'https://jitpack.io'} //repositorio jitpack
 }
 
 dependencies {
+	//
+	implementation 'com.github.xsismadn3ss:shared-dtos:v1.0.18'
 	implementation 'org.springframework.boot:spring-boot-starter-amqp'
 	implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.8.5'
 	runtimeOnly 'com.mysql:mysql-connector-j' //tambien
