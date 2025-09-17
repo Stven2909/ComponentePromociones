@@ -11,31 +11,12 @@ import java.util.Optional;
 
 public interface CuponRepository extends JpaRepository<Cupon, Long> {
 
-    /**
-     * Busca un cupón por su código.
-     * `Optional` se usa porque el cupón podría no existir.
-     */
     Optional<Cupon> findByCodigo(String codigo);
 
-    /**
-     * Busca cupones activos.
-     */
-    List<Cupon> findByEstaActivaTrue();
-
-    /**
-     * Busca cupones vigentes (entre fechas)
-     */
-    @Query("SELECT c FROM Cupon c WHERE c.fechaInicio <= :fechaHora AND c.fechaFin >= :fechaHora")
-    List<Cupon> findCuponesVigentes(@Param("fechaHora") LocalDateTime fechaHora);
-
-    /**
-     * Busca cupones activos, vigentes, y con usos disponibles.
-     */
-    @Query("SELECT c FROM Cupon c WHERE c.estaActiva = true AND c.fechaInicio <= :fechaHora AND c.fechaFin >= :fechaHora AND c.usosActuales < c.usosMaximos")
+    @Query("SELECT c FROM Cupon c WHERE c.estado = 'ACTIVO' AND c.fechaInicio <= :fechaHora AND c.fechaFin >= :fechaHora AND c.usosActuales < c.usosMaximos")
     List<Cupon> findCuponesValidosParaUso(@Param("fechaHora") LocalDateTime fechaHora);
 
-    /**
-     * Busca cupones por nombre (contiene).
-     */
-    List<Cupon> findByNombreContainingIgnoreCase(String nombre);
+    // Si tu entidad Cupon tiene un campo 'estaActiva' en lugar de 'estado', la consulta original es correcta.
+    // Si tienes ambos, asegúrate de usar el correcto. La DTO CuponesDTO que proporcionaste usa 'estado'.
+
 }
