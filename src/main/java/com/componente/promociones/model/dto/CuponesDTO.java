@@ -33,7 +33,10 @@ public class CuponesDTO {
     @NotBlank(message = "El estado no puede estar vacío")
     private String estado;
 
-    @NotNull(message = "La fecha de creación no puede ser nula")
-    private LocalDateTime creado;
+    @NotNull(message = "La fecha de inicio no puede ser nula")
+    private LocalDateTime fecha_inicio;
+
+    @NotNull(message = "La fecha de fin no puede ser nula")
+    private LocalDateTime fecha_fin;
 
 }

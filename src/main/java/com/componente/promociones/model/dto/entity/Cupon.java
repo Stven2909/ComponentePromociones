@@ -25,13 +25,20 @@ public class Cupon {
     @Column(nullable = false)
     private Double descuento;
 
-    @Column(nullable = false)
-    private Integer usos;
+    // Campos de uso para la validación
+    @Column(nullable = false, name = "usos_maximos")
+    private Integer usosMaximos;
+
+    @Column(nullable = false, name = "usos_actuales", columnDefinition = "INT DEFAULT 0")
+    private Integer usosActuales = 0;
 
     @Column(nullable = false)
     private String estado;
 
-    @Column(nullable = false)
-    private LocalDateTime creado;
+    // Campos de fecha para la validación
+    @Column(nullable = false, name = "fecha_inicio")
+    private LocalDateTime fechaInicio;
 
+    @Column(nullable = false, name = "fecha_fin")
+    private LocalDateTime fechaFin;
 }

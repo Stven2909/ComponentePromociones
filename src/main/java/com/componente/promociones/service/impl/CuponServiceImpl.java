@@ -6,6 +6,8 @@ import com.componente.promociones.repository.CuponRepository;
 import com.componente.promociones.service.CuponService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -13,25 +15,27 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class CuponServiceImpl implements CuponService {
 
-    private final CuponRepository cuponesRepository;
+    private final CuponRepository cuponRepository;
 
     @Override
     public CuponesDTO crearCupon(CuponesDTO dto) {
         Cupon cupon = convertirDtoAEntity(dto);
-        Cupon cuponGuardado = cuponesRepository.save(cupon);
+        // Al crear, se inicializa usosActuales en 0.
+        cupon.setUsosActuales(0);
+        Cupon cuponGuardado = cuponRepository.save(cupon);
         return convertirEntityADTO(cuponGuardado);
     }
 
     @Override
     public CuponesDTO obtenerCuponPorCodigo(String codigo) {
-        Cupon cupon = cuponesRepository.findByCodigo(codigo)
+        Cupon cupon = cuponRepository.findByCodigo(codigo)
                 .orElseThrow(() -> new RuntimeException("Cupón no encontrado con código: " + codigo));
         return convertirEntityADTO(cupon);
     }
 
     @Override
     public List<CuponesDTO> listarCupones() {
-        List<Cupon> cupones = cuponesRepository.findAll();
+        List<Cupon> cupones = cuponRepository.findAll();
         return cupones.stream()
                 .map(this::convertirEntityADTO)
                 .collect(Collectors.toList());
@@ -39,26 +43,27 @@ public class CuponServiceImpl implements CuponService {
 
     @Override
     public CuponesDTO actualizarCupon(Long id, CuponesDTO dto) {
-        Cupon cuponExistente = cuponesRepository.findById(id)
+        Cupon cuponExistente = cuponRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Cupón no encontrado con ID: " + id));
 
         cuponExistente.setCodigo(dto.getCodigo());
         cuponExistente.setTipo(dto.getTipo());
         cuponExistente.setDescuento(dto.getDescuento());
-        cuponExistente.setUsos(dto.getUsos());
+        cuponExistente.setUsosMaximos(dto.getUsos());
         cuponExistente.setEstado(dto.getEstado());
-        cuponExistente.setCreado(dto.getCreado());
+        cuponExistente.setFechaInicio(dto.getFecha_inicio());
+        cuponExistente.setFechaFin(dto.getFecha_fin());
 
-        Cupon cuponActualizado = cuponesRepository.save(cuponExistente);
+        Cupon cuponActualizado = cuponRepository.save(cuponExistente);
         return convertirEntityADTO(cuponActualizado);
     }
 
     @Override
     public void eliminarCupon(Long id) {
-        if (!cuponesRepository.existsById(id)) {
+        if (!cuponRepository.existsById(id)) {
             throw new RuntimeException("Cupón no encontrado con ID: " + id);
         }
-        cuponesRepository.deleteById(id);
+        cuponRepository.deleteById(id);
     }
 
     private Cupon convertirDtoAEntity(CuponesDTO dto) {
@@ -66,9 +71,10 @@ public class CuponServiceImpl implements CuponService {
         cupon.setCodigo(dto.getCodigo());
         cupon.setTipo(dto.getTipo());
         cupon.setDescuento(dto.getDescuento());
-        cupon.setUsos(dto.getUsos());
+        cupon.setUsosMaximos(dto.getUsos());
         cupon.setEstado(dto.getEstado());
-        cupon.setCreado(dto.getCreado());
+        cupon.setFechaInicio(dto.getFecha_inicio());
+        cupon.setFechaFin(dto.getFecha_fin());
         return cupon;
     }
 
@@ -78,9 +84,10 @@ public class CuponServiceImpl implements CuponService {
         dto.setCodigo(cupon.getCodigo());
         dto.setTipo(cupon.getTipo());
         dto.setDescuento(cupon.getDescuento());
-        dto.setUsos(cupon.getUsos());
+        dto.setUsos(cupon.getUsosMaximos());
         dto.setEstado(cupon.getEstado());
-        dto.setCreado(cupon.getCreado());
+        dto.setFecha_inicio(cupon.getFechaInicio());
+        dto.setFecha_fin(cupon.getFechaFin());
         return dto;
     }
 }
