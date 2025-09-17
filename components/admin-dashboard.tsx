@@ -59,7 +59,7 @@ import {
 import { Header } from './header';
 import { Footer } from './footer';
 
-// URL base del backend
+// URL base del backend para las promociones
 const API_BASE_URL = 'http://localhost:8502/service-main/api/promociones';
 
 // Interface para Promocion (mapea con PromocionDTO del backend)
@@ -77,8 +77,11 @@ interface Promocion {
 }
 
 export function AdminDashboard() {
+  // Estados generales para la UI
   const [activeTab, setActiveTab] = useState('dashboard');
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  
+  // Estados para diálogos y edición
   const [showCreatePromotion, setShowCreatePromotion] = useState(false);
   const [showCreateCoupon, setShowCreateCoupon] = useState(false);
   const [showCreateCampaign, setShowCreateCampaign] = useState(false);
@@ -86,9 +89,10 @@ export function AdminDashboard() {
   const [editingCoupon, setEditingCoupon] = useState<any>(null);
   const [editingCampaign, setEditingCampaign] = useState<any>(null);
   const [promociones, setPromociones] = useState<Promocion[]>([]);
+  const [coupons, setCoupons] = useState<any[]>([]);
   const { toast } = useToast();
 
-  // Estado del formulario ajustado al PromocionDTO
+  // Estado del formulario para promociones (ajustado al PromocionDTO)
   const [promotionForm, setPromotionForm] = useState({
     nombre: '',
     descripcion: '',
@@ -101,20 +105,16 @@ export function AdminDashboard() {
     estaActiva: true,
   });
 
+  // Estado para cupones (ajustado al DTO)
   const [couponForm, setCouponForm] = useState({
-    code: '',
-    description: '',
-    type: 'percentage',
-    value: '',
-    minPurchase: '',
-    maxDiscount: '',
-    startDate: '',
-    endDate: '',
-    maxUses: '',
-    userLimit: '',
-    categories: [] as string[],
+    codigo: '',
+    tipo: 'porcentaje',
+    descuento: '',
+    usos: '',
+    estado: 'ACTIVO',
+    fecha_inicio: '',
+    fecha_fin: '',
     isActive: true,
-    isStackable: false,
   });
 
   const [campaignForm, setCampaignForm] = useState({
@@ -129,57 +129,12 @@ export function AdminDashboard() {
     isActive: true,
   });
 
-  // 👇🏼 AQUI EMPIEZAN LOS CAMBIOS
+  // Estados para dashboard stats (cargados desde API)
   const [dashboardStats, setDashboardStats] = useState([]);
   const [loadingStats, setLoadingStats] = useState(true);
   const [errorStats, setErrorStats] = useState(null);
   
-  // Borra la constante `stats` que tenías aquí
-  // const stats = [ ... ];
-
-  const [coupons, setCoupons] = useState([
-    {
-      id: 1,
-      code: 'SUMMER30',
-      discount: '30%',
-      type: 'Porcentaje',
-      uses: 245,
-      maxUses: 500,
-      status: 'Activo',
-      created: '2024-06-01',
-    },
-    {
-      id: 2,
-      code: 'FREESHIP',
-      discount: 'Gratis',
-      type: 'Envío',
-      uses: 89,
-      maxUses: 200,
-      status: 'Activo',
-      created: '2024-06-15',
-    },
-    {
-      id: 3,
-      code: 'WELCOME20',
-      discount: '$20',
-      type: 'Fijo',
-      uses: 67,
-      maxUses: 1000,
-      status: 'Activo',
-      created: '2024-05-20',
-    },
-    {
-      id: 4,
-      code: 'FLASH50',
-      discount: '50%',
-      type: 'Porcentaje',
-      uses: 156,
-      maxUses: 300,
-      status: 'Expirado',
-      created: '2024-05-01',
-    },
-  ]);
-
+  // Datos mockeados para campañas
   const [campaigns, setCampaigns] = useState([
     {
       id: 1,
@@ -213,13 +168,14 @@ export function AdminDashboard() {
     },
   ]);
 
+  // Datos mockeados para actividad reciente
   const recentActivity = [
     { action: 'Nueva promoción "Verano"', time: 'Hace 5 minutos', status: 'Activa', type: 'success' },
     { action: 'Cupón "FREESHIP" expirado', time: 'Hace 1 hora', status: 'Expirado', type: 'warning' },
     { action: 'Campaña "Black Friday" creada', time: 'Ayer', status: 'Borrador', type: 'info' },
   ];
 
-  // Fetch promociones del backend
+  // Función para fetch de promociones activas desde el backend
   const fetchPromociones = async () => {
     try {
       const response = await fetch(`${API_BASE_URL}/activas`, {
@@ -242,15 +198,55 @@ export function AdminDashboard() {
     }
   };
 
-  // 👇🏼 NUEVO CODIGO PARA CARGAR LAS ESTADISTICAS
+  // Función para fetch de cupones activos desde el backend
+  const fetchCupones = async () => {
+    try {
+      const response = await fetch(`http://localhost:8502/service-main/api/cupones`, {
+        method: 'GET',
+        credentials: 'include',
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || `Error ${response.status}: No se pudieron cargar los cupones`);
+      }
+
+      const data = await response.json();
+      // Mapear los datos para que coincidan con la estructura esperada en la tabla
+      const formattedCoupons = data.map((coupon: any) => ({
+        id: coupon.id,
+        code: coupon.codigo,
+        type: coupon.tipo,
+        discount: coupon.descuento,
+        uses: coupon.usos || 0,
+        maxUses: coupon.usos || 0, // Ajustar según el backend
+        status: coupon.estado === 'ACTIVO' ? 'Activo' : 'Inactivo',
+        created: coupon.fecha_inicio,
+      }));
+      setCoupons(formattedCoupons);
+      console.log('Formatted coupons:', formattedCoupons); // Debug log
+    } catch (error) {
+      console.error('Error fetching cupones:', error);
+      toast({
+        title: 'Error',
+        description: error instanceof Error ? error.message : 'No se pudieron cargar los cupones',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  // Función para fetch de estadísticas del dashboard desde el backend
   const fetchDashboardStats = async () => {
     try {
+      setLoadingStats(true);
+      setErrorStats(null);
       const response = await fetch(`${API_BASE_URL}/stats`);
       if (!response.ok) {
         throw new Error('Error al obtener las estadísticas del dashboard');
       }
       const data = await response.json();
 
+      // Formatear las stats para la UI
       const formattedStats = [
         {
           title: 'Promociones Activas',
@@ -285,24 +281,57 @@ export function AdminDashboard() {
       setDashboardStats(formattedStats);
     } catch (error) {
       console.error('Error fetching dashboard stats:', error);
-      setErrorStats(error.message);
+      setErrorStats(error instanceof Error ? error.message : 'Error desconocido');
     } finally {
       setLoadingStats(false);
     }
   };
 
-  // Cargar promociones al cambiar a la pestaña de promociones
+  // Effect para cargar datos según la pestaña activa
   useEffect(() => {
     if (activeTab === 'promotions') {
       fetchPromociones();
     }
-    // 👇🏼 NUEVO useEffect para cargar las estadisticas
+    if (activeTab === 'coupons') {
+      fetchCupones();
+    }
     if (activeTab === 'dashboard') {
       fetchDashboardStats();
     }
   }, [activeTab]);
 
-  // Crear o actualizar promoción
+  // Función para ver detalles de una promoción (usando toast para mostrar info)
+  const handleViewPromotion = (promotion: Promocion) => {
+    console.log('Viewing promotion:', promotion); // Debug log para verificar los datos
+    try {
+      toast({
+        title: 'Detalles de la Promoción',
+        description: (
+          <div className="space-y-1 text-sm">
+            <p><strong>Nombre:</strong> {promotion.nombre}</p>
+            <p><strong>Descripción:</strong> {promotion.descripcion}</p>
+            <p><strong>Tipo:</strong> {promotion.tipoPromocion}</p>
+            <p><strong>Condición:</strong> {promotion.tipoCondicion}</p>
+            <p><strong>Descuento:</strong> {promotion.valorDescuento * 100}%</p>
+            <p><strong>Inicio:</strong> {new Date(promotion.fechaInicio).toLocaleString()}</p>
+            <p><strong>Fin:</strong> {new Date(promotion.fechaFin).toLocaleString()}</p>
+            <p><strong>Acumulable:</strong> {promotion.esAcumulable ? 'Sí' : 'No'}</p>
+            <p><strong>Estado:</strong> {promotion.estaActiva ? 'Activa' : 'Pausada'}</p>
+          </div>
+        ),
+        duration: 5000, // Asegurar que el toast sea visible por 5 segundos
+      });
+    } catch (error) {
+      console.error('Error displaying promotion details:', error);
+      toast({
+        title: 'Error',
+        description: 'No se pudieron mostrar los detalles de la promoción',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  // Función para crear o actualizar una promoción
   const handleCreatePromotion = async () => {
     try {
       // Validar campos requeridos
@@ -310,24 +339,9 @@ export function AdminDashboard() {
         throw new Error('Por favor, completa todos los campos requeridos');
       }
 
-      // Convertir fechas al formato yyyy-MM-dd HH:mm:ss para LocalDateTime
-      const fechaInicio = new Date(promotionForm.fechaInicio).toLocaleString('sv-SE', {
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-      }).replace(' ', 'T');
-
-      const fechaFin = new Date(promotionForm.fechaFin).toLocaleString('sv-SE', {
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-      }).replace(' ', 'T');
+      // Convertir fechas al formato ISO para el backend (LocalDateTime)
+      const fechaInicio = new Date(promotionForm.fechaInicio).toISOString().slice(0, 19).replace('T', ' ');
+      const fechaFin = new Date(promotionForm.fechaFin).toISOString().slice(0, 19).replace('T', ' ');
 
       const payload = {
         ...promotionForm,
@@ -358,7 +372,7 @@ export function AdminDashboard() {
 
       setShowCreatePromotion(false);
       resetPromotionForm();
-      fetchPromociones();
+      fetchPromociones(); // Recargar la lista
     } catch (error) {
       console.error('Error creating/updating promoción:', error);
       toast({
@@ -369,8 +383,9 @@ export function AdminDashboard() {
     }
   };
 
-  // Editar promoción
+  // Función para editar una promoción (abre el diálogo con datos precargados)
   const handleEditPromotion = (promotion: Promocion) => {
+    console.log('Editing promotion:', promotion); // Debug log
     setEditingPromotion(promotion);
     setPromotionForm({
       nombre: promotion.nombre,
@@ -378,16 +393,17 @@ export function AdminDashboard() {
       tipoPromocion: promotion.tipoPromocion,
       tipoCondicion: promotion.tipoCondicion,
       valorDescuento: promotion.valorDescuento.toString(),
-      fechaInicio: promotion.fechaInicio.split('.')[0],
-      fechaFin: promotion.fechaFin.split('.')[0],
+      fechaInicio: promotion.fechaInicio.split(' ')[0] + 'T' + promotion.fechaInicio.split(' ')[1].slice(0, 5), // Ajustar para datetime-local
+      fechaFin: promotion.fechaFin.split(' ')[0] + 'T' + promotion.fechaFin.split(' ')[1].slice(0, 5),
       esAcumulable: promotion.esAcumulable,
       estaActiva: promotion.estaActiva,
     });
     setShowCreatePromotion(true);
   };
 
-  // Eliminar promoción
+  // Función para eliminar una promoción
   const handleDeletePromotion = async (id: number) => {
+    console.log('Deleting promotion ID:', id); // Debug log
     try {
       const response = await fetch(`${API_BASE_URL}/${id}`, {
         method: 'DELETE',
@@ -401,7 +417,7 @@ export function AdminDashboard() {
         title: 'Éxito',
         description: 'Promoción eliminada correctamente',
       });
-      fetchPromociones();
+      fetchPromociones(); // Recargar la lista
     } catch (error) {
       console.error('Error deleting promoción:', error);
       toast({
@@ -412,43 +428,22 @@ export function AdminDashboard() {
     }
   };
 
-  // Toglear estado (activa/pausada)
+  // Función para togglear el estado de una promoción (activa/pausada)
   const handleTogglePromotionStatus = async (id: number) => {
     try {
       const promocion = promociones.find((p) => p.id === id);
       if (!promocion) return;
 
-      // Convertir fechas al formato yyyy-MM-dd HH:mm:ss para LocalDateTime
-      const fechaInicio = new Date(promocion.fechaInicio).toLocaleString('sv-SE', {
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-      }).replace(' ', 'T');
-
-      const fechaFin = new Date(promocion.fechaFin).toLocaleString('sv-SE', {
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-      }).replace(' ', 'T');
-
-      const updatedPromocion = {
+      // Preparar payload para actualización (solo cambiar estaActiva)
+      const payload = {
         ...promocion,
-        valorDescuento: parseFloat(promocion.valorDescuento.toString()) || 0,
-        fechaInicio,
-        fechaFin,
         estaActiva: !promocion.estaActiva,
       };
 
       const response = await fetch(`${API_BASE_URL}/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updatedPromocion),
+        body: JSON.stringify(payload),
         credentials: 'include',
       });
 
@@ -458,9 +453,9 @@ export function AdminDashboard() {
       }
       toast({
         title: 'Éxito',
-        description: `Promoción ${updatedPromocion.estaActiva ? 'activada' : 'pausada'} correctamente`,
+        description: `Promoción ${payload.estaActiva ? 'activada' : 'pausada'} correctamente`,
       });
-      fetchPromociones();
+      fetchPromociones(); // Recargar la lista
     } catch (error) {
       console.error('Error toggling promoción status:', error);
       toast({
@@ -471,7 +466,7 @@ export function AdminDashboard() {
     }
   };
 
-  // Resetear formulario de promoción
+  // Función para resetear el formulario de promoción
   const resetPromotionForm = () => {
     setPromotionForm({
       nombre: '',
@@ -487,72 +482,299 @@ export function AdminDashboard() {
     setEditingPromotion(null);
   };
 
-  // Resetear formulario de cupones
+  // Función para resetear el formulario del cupón
   const resetCouponForm = () => {
     setCouponForm({
-      code: '',
-      description: '',
-      type: 'percentage',
-      value: '',
-      minPurchase: '',
-      maxDiscount: '',
-      startDate: '',
-      endDate: '',
-      maxUses: '',
-      userLimit: '',
-      categories: [],
+      codigo: '',
+      tipo: 'porcentaje',
+      descuento: '',
+      usos: '',
+      estado: 'ACTIVO',
+      fecha_inicio: '',
+      fecha_fin: '',
       isActive: true,
-      isStackable: false,
     });
     setEditingCoupon(null);
   };
 
-  // Crear o actualizar cupón
-  const handleCreateCoupon = () => {
-    if (editingCoupon) {
-      setCoupons(coupons.map((c) => (c.id === editingCoupon.id ? { ...editingCoupon, ...couponForm } : c)));
-    } else {
-      const newCoupon = {
-        id: Date.now(),
-        ...couponForm,
-        uses: 0,
-        status: couponForm.isActive ? 'Activo' : 'Inactivo',
-      };
-      setCoupons([...coupons, newCoupon]);
+  // Función para crear un nuevo cupón (método POST)
+  const handleCreateCoupon = async () => {
+    // Validar campos requeridos
+    if (!couponForm.codigo || !couponForm.descuento || !couponForm.fecha_inicio || !couponForm.fecha_fin) {
+      toast({
+        title: 'Error',
+        description: 'Por favor, completa todos los campos requeridos',
+        variant: 'destructive',
+      });
+      return;
     }
-    setShowCreateCoupon(false);
-    resetCouponForm();
-    refreshAllData();
+
+    // Convertir fechas de datetime-local (YYYY-MM-DDTHH:mm) a ISO 8601 (YYYY-MM-DDTHH:mm:ss)
+    const formatDateForBackend = (dateString: string): string => {
+      if (!dateString) return '';
+      return `${dateString}:00`; // Añade :00 para segundos
+    };
+
+    const dtoData = {
+      codigo: couponForm.codigo,
+      tipo: couponForm.tipo === 'porcentaje' ? 'Porcentaje' : 'Fijo',
+      descuento: parseFloat(couponForm.descuento),
+      usos: parseInt(couponForm.usos, 10) || 0,
+      estado: couponForm.isActive ? 'ACTIVO' : 'INACTIVO',
+      fecha_inicio: formatDateForBackend(couponForm.fecha_inicio),
+      fecha_fin: formatDateForBackend(couponForm.fecha_fin),
+    };
+
+    try {
+      const response = await fetch(`http://localhost:8502/service-main/api/cupones`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(dtoData),
+        credentials: 'include',
+      });
+
+      if (response.ok) {
+        toast({
+          title: 'Éxito',
+          description: 'Cupón creado correctamente',
+        });
+        setShowCreateCoupon(false);
+        resetCouponForm();
+        fetchCupones(); // Refrescar la lista de cupones
+      } else {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Error al crear cupón');
+      }
+    } catch (error) {
+      console.error('Error creating cupón:', error);
+      toast({
+        title: 'Error',
+        description: error instanceof Error ? error.message : 'No se pudo crear el cupón',
+        variant: 'destructive',
+      });
+    }
   };
 
-  // Editar cupón
-  const handleEditCoupon = (coupon: any) => {
-    setEditingCoupon(coupon);
-    setCouponForm({
-      code: coupon.code,
-      description: '',
-      type: coupon.type === 'Porcentaje' ? 'percentage' : coupon.type === 'Fijo' ? 'fixed' : 'shipping',
-      value: coupon.discount.replace(/[%$]/g, '').replace('Gratis', '0'),
-      minPurchase: '',
-      maxDiscount: '',
-      startDate: '',
-      endDate: '',
-      maxUses: coupon.maxUses.toString(),
-      userLimit: '',
-      categories: [],
-      isActive: coupon.status === 'Activo',
-      isStackable: false,
-    });
-    setShowCreateCoupon(true);
+  // Función para poblar el formulario con los datos de un cupón existente
+  const handleEditCoupon = async (coupon: any) => {
+    console.log('Attempting to edit coupon:', coupon); // Debug log to verify the coupon object
+    if (!coupon || !coupon.code) {
+      console.error('Invalid coupon object or missing code:', coupon);
+      toast({
+        title: 'Error',
+        description: 'No se proporcionó un código de cupón válido',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    try {
+      const response = await fetch(`http://localhost:8502/service-main/api/cupones/${coupon.code}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+      });
+
+      console.log('Response status:', response.status); // Debug log for response status
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || `Error ${response.status}: No se pudo cargar el cupón con código ${coupon.code}`);
+      }
+
+      const data = await response.json();
+      console.log('Fetched coupon data:', data); // Debug log for fetched data
+
+      // Función para formatear fechas al formato datetime-local (YYYY-MM-DDTHH:mm)
+      const formatDateForInput = (dateString: string | null | undefined): string => {
+        if (!dateString || typeof dateString !== 'string') {
+          console.warn(`Invalid or missing date: ${dateString}`);
+          return '';
+        }
+        // Manejar formato ISO 8601 (YYYY-MM-DDTHH:mm:ss) o formato con espacio (YYYY-MM-DD HH:mm:ss)
+        const isoMatch = dateString.match(/^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})/);
+        const spaceMatch = dateString.match(/^(\d{4}-\d{2}-\d{2})\s(\d{2}:\d{2})/);
+        
+        if (isoMatch) {
+          return `${isoMatch[1]}T${isoMatch[2]}`; // Convierte 2025-09-17T12:00:00 a 2025-09-17T12:00
+        } else if (spaceMatch) {
+          return `${spaceMatch[1]}T${spaceMatch[2]}`; // Convierte 2025-09-17 12:00:00 a 2025-09-17T12:00
+        } else {
+          console.warn(`Unexpected date format: ${dateString}`);
+          return '';
+        }
+      };
+
+      setCouponForm({
+        codigo: data.codigo || '',
+        tipo: data.tipo ? data.tipo.toLowerCase() : 'porcentaje',
+        descuento: data.descuento ? data.descuento.toString() : '',
+        usos: data.usos ? data.usos.toString() : '',
+        estado: data.estado || 'ACTIVO',
+        fecha_inicio: formatDateForInput(data.fecha_inicio),
+        fecha_fin: formatDateForInput(data.fecha_fin),
+        isActive: data.estado === 'ACTIVO',
+      });
+      setEditingCoupon(data);
+      setShowCreateCoupon(true);
+    } catch (error) {
+      console.error('Error al obtener cupón para editar:', error);
+      toast({
+        title: 'Error',
+        description: error instanceof Error ? error.message : `No se pudo cargar el cupón con código ${coupon.code}`,
+        variant: 'destructive',
+      });
+    }
   };
 
-  // Eliminar cupón
-  const handleDeleteCoupon = (id: number) => {
-    setCoupons(coupons.filter((c) => c.id !== id));
-    refreshAllData();
+  // Función para actualizar un cupón existente (método PUT)
+  const handleUpdateCoupon = async () => {
+    // Validar campos requeridos
+    if (!couponForm.codigo || !couponForm.descuento || !couponForm.fecha_inicio || !couponForm.fecha_fin) {
+      toast({
+        title: 'Error',
+        description: 'Por favor, completa todos los campos requeridos',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    // Convertir fechas de datetime-local (YYYY-MM-DDTHH:mm) a ISO 8601 (YYYY-MM-DDTHH:mm:ss)
+    const formatDateForBackend = (dateString: string): string => {
+      if (!dateString) return '';
+      return `${dateString}:00`; // Añade :00 para segundos
+    };
+
+    const updatedDto = {
+      id: editingCoupon.id,
+      codigo: couponForm.codigo,
+      tipo: couponForm.tipo === 'porcentaje' ? 'Porcentaje' : 'Fijo',
+      descuento: parseFloat(couponForm.descuento),
+      usos: parseInt(couponForm.usos, 10) || 0,
+      estado: couponForm.isActive ? 'ACTIVO' : 'INACTIVO',
+      fecha_inicio: formatDateForBackend(couponForm.fecha_inicio),
+      fecha_fin: formatDateForBackend(couponForm.fecha_fin),
+    };
+
+    try {
+      const response = await fetch(`http://localhost:8502/service-main/api/cupones/${editingCoupon.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(updatedDto),
+        credentials: 'include',
+      });
+
+      if (response.ok) {
+        toast({
+          title: 'Éxito',
+          description: 'Cupón actualizado correctamente',
+        });
+        setShowCreateCoupon(false);
+        resetCouponForm();
+        fetchCupones(); // Refrescar la lista de cupones
+      } else {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Error al actualizar cupón');
+      }
+    } catch (error) {
+      console.error('Error updating cupón:', error);
+      toast({
+        title: 'Error',
+        description: error instanceof Error ? error.message : 'No se pudo actualizar el cupón',
+        variant: 'destructive',
+      });
+    }
   };
 
-  // Resetear formulario de campañas
+  // Función para eliminar un cupón
+  const handleDeleteCoupon = async (id: number) => {
+    try {
+      const response = await fetch(`http://localhost:8502/service-main/api/cupones/${id}`, {
+        method: 'DELETE',
+        credentials: 'include',
+      });
+
+      if (response.ok) {
+        toast({
+          title: 'Éxito',
+          description: 'Cupón eliminado correctamente',
+        });
+        fetchCupones(); // Refrescar la lista
+      } else {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || `Error ${response.status}: No se pudo eliminar el cupón con ID ${id}`);
+      }
+    } catch (error) {
+      console.error('Error deleting cupón:', error);
+      toast({
+        title: 'Error',
+        description: error instanceof Error ? error.message : 'No se pudo eliminar el cupón',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  // Función para cambiar el estado de un cupón
+  const handleToggleCouponStatus = async (couponId: number) => {
+    try {
+      // Obtiene los datos actuales del cupón (usamos ID para obtener el cupón)
+      const response = await fetch(`http://localhost:8502/service-main/api/cupones/${coupons.find(c => c.id === couponId)?.code}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || `Error ${response.status}: No se pudo cargar el cupón con ID ${couponId}`);
+      }
+
+      const couponToUpdate = await response.json();
+      console.log('Fetched coupon for toggle:', couponToUpdate); // Debug log
+
+      // Determina el nuevo estado y el DTO para el PUT
+      const newStatus = couponToUpdate.estado === 'ACTIVO' ? 'INACTIVO' : 'ACTIVO';
+      const updatedDto = {
+        ...couponToUpdate,
+        estado: newStatus,
+      };
+
+      // Envía la solicitud PUT al backend con el estado actualizado
+      const putResponse = await fetch(`http://localhost:8502/service-main/api/cupones/${couponToUpdate.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updatedDto),
+        credentials: 'include',
+      });
+
+      if (putResponse.ok) {
+        toast({
+          title: 'Éxito',
+          description: `Cupón ${newStatus === 'ACTIVO' ? 'activado' : 'desactivado'} correctamente`,
+        });
+        fetchCupones(); // Refrescar la lista
+      } else {
+        const errorData = await putResponse.json();
+        throw new Error(errorData.message || 'Error al actualizar el estado');
+      }
+    } catch (error) {
+      console.error('Error toggling cupón status:', error);
+      toast({
+        title: 'Error',
+        description: error instanceof Error ? error.message : 'No se pudo actualizar el estado del cupón',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  // Funciones para campañas (mockeadas por ahora)
   const resetCampaignForm = () => {
     setCampaignForm({
       name: '',
@@ -568,7 +790,6 @@ export function AdminDashboard() {
     setEditingCampaign(null);
   };
 
-  // Crear o actualizar campaña
   const handleCreateCampaign = () => {
     if (editingCampaign) {
       setCampaigns(campaigns.map((c) => (c.id === editingCampaign.id ? { ...editingCampaign, ...campaignForm } : c)));
@@ -583,10 +804,9 @@ export function AdminDashboard() {
     }
     setShowCreateCampaign(false);
     resetCampaignForm();
-    refreshAllData();
+    fetchDashboardStats();
   };
 
-  // Editar campaña
   const handleEditCampaign = (campaign: any) => {
     setEditingCampaign(campaign);
     setCampaignForm({
@@ -603,38 +823,30 @@ export function AdminDashboard() {
     setShowCreateCampaign(true);
   };
 
-  // Eliminar campaña
   const handleDeleteCampaign = (id: number) => {
     setCampaigns(campaigns.filter((c) => c.id !== id));
-    refreshAllData();
+    fetchDashboardStats();
   };
 
-  // Toglear estado de cupón
-  const handleToggleCouponStatus = (couponId: number) => {
-    setCoupons(
-      coupons.map((c) =>
-        c.id === couponId ? { ...c, status: c.status === 'Activo' ? 'Inactivo' : 'Activo' } : c,
-      ),
-    );
-    refreshAllData();
-  };
-
-  // Toglear estado de campaña
   const handleToggleCampaignStatus = (campaignId: number) => {
     setCampaigns(
       campaigns.map((c) =>
-        c.id === campaignId ? { ...c, status: c.status === 'Activa' ? 'Pausada' : 'Activa' } : c,
+        c.id === campaignId ? { ...c, status: c.status === 'Activa' ? 'Pausada' : 'Actbruniva' } : c,
       ),
     );
-    refreshAllData();
+    fetchDashboardStats();
   };
 
-  // Simular actualización de datos
+  // Función para refrescar todos los datos (incluyendo stats)
   const refreshAllData = () => {
     console.log('[v0] Refreshing all data across sections');
-    fetchDashboardStats(); // También refrescamos las estadísticas cuando se actualiza la data
+    fetchDashboardStats();
+    if (activeTab === 'coupons') {
+      fetchCupones();
+    }
   };
 
+  // Items del sidebar
   const sidebarItems = [
     { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
     { id: 'promotions', label: 'Promociones', icon: Tag },
@@ -644,10 +856,11 @@ export function AdminDashboard() {
 
   return (
     <div className="flex flex-col h-screen bg-white">
+      {/* Header del dashboard */}
       <Header onMenuClick={() => setSidebarOpen(!sidebarOpen)} />
 
       <div className="flex flex-1 overflow-hidden">
-        {/* Sidebar */}
+        {/* Sidebar navegable */}
         <div
           className={`${sidebarOpen ? 'w-64' : 'w-16'} transition-all duration-300 bg-slate-900 border-r border-slate-800`}
         >
@@ -681,13 +894,12 @@ export function AdminDashboard() {
           </div>
         </div>
 
-        {/* Main Content */}
+        {/* Contenido principal */}
         <div className="flex-1 flex flex-col overflow-hidden">
           <main className="flex-1 overflow-auto p-6 bg-gray-50">
             {activeTab === 'dashboard' && (
               <div className="space-y-6">
-                {/* Stats Grid */}
-                {/* 👇🏼 AQUI ESTÁ EL CAMBIO EN EL RENDERIZADO */}
+                {/* Grid de estadísticas del dashboard */}
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                   {loadingStats ? (
                     <p>Cargando estadísticas...</p>
@@ -716,6 +928,7 @@ export function AdminDashboard() {
                   )}
                 </div>
                 
+                {/* Tabla de promociones activas en dashboard */}
                 <Card>
                   <CardHeader>
                     <CardTitle>Promociones Activas</CardTitle>
@@ -730,6 +943,7 @@ export function AdminDashboard() {
                           <TableHead>Descuento</TableHead>
                           <TableHead>Estado</TableHead>
                           <TableHead>Expira</TableHead>
+                          <TableHead className="text-right">Acciones</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -756,6 +970,20 @@ export function AdminDashboard() {
                             <TableCell className="text-sm">
                               {new Date(promo.fechaFin).toLocaleDateString()}
                             </TableCell>
+                            <TableCell className="text-right">
+                              <div className="flex items-center justify-end gap-2">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => {
+                                    console.log('Clicked View for promotion:', promo.id); // Debug log
+                                    handleViewPromotion(promo);
+                                  }}
+                                >
+                                  <Eye className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </TableCell>
                           </TableRow>
                         ))}
                       </TableBody>
@@ -763,7 +991,7 @@ export function AdminDashboard() {
                   </CardContent>
                 </Card>
 
-                {/* Recent Activity */}
+                {/* Sección de actividad reciente */}
                 <Card className="bg-white border-gray-200">
                   <CardHeader>
                     <CardTitle className="text-gray-900">Actividad Reciente</CardTitle>
@@ -794,6 +1022,7 @@ export function AdminDashboard() {
 
             {activeTab === 'promotions' && (
               <div className="space-y-6">
+                {/* Header de la sección de promociones */}
                 <div className="flex justify-between items-center">
                   <h3 className="text-2xl font-bold text-gray-900">Gestión de Promociones</h3>
                   <Button
@@ -805,7 +1034,7 @@ export function AdminDashboard() {
                   </Button>
                 </div>
 
-                {/* Promotions Header */}
+                {/* Filtros y búsqueda */}
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-4">
                     <div className="relative">
@@ -826,7 +1055,7 @@ export function AdminDashboard() {
                   </div>
                 </div>
 
-                {/* Promotions Table */}
+                {/* Tabla de promociones */}
                 <Card>
                   <CardContent className="p-0">
                     <Table>
@@ -879,7 +1108,14 @@ export function AdminDashboard() {
                             <TableCell>{new Date(promo.fechaFin).toLocaleDateString()}</TableCell>
                             <TableCell className="text-right">
                               <div className="flex items-center justify-end gap-2">
-                                <Button variant="ghost" size="sm">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => {
+                                    console.log('Clicked View for promotion:', promo.id); // Debug log
+                                    handleViewPromotion(promo);
+                                  }}
+                                >
                                   <Eye className="h-4 w-4" />
                                 </Button>
                                 <Button
@@ -904,11 +1140,136 @@ export function AdminDashboard() {
                     </Table>
                   </CardContent>
                 </Card>
+
+                {/* Diálogo para crear/editar promoción */}
+                <Dialog open={showCreatePromotion} onOpenChange={setShowCreatePromotion}>
+                  <DialogContent className="max-w-2xl">
+                    <DialogHeader>
+                      <DialogTitle>{editingPromotion ? 'Editar Promoción' : 'Nueva Promoción'}</DialogTitle>
+                      <DialogDescription>
+                        {editingPromotion ? 'Modifica los detalles de la promoción.' : 'Crea una nueva promoción para tu tienda.'}
+                      </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4 py-4">
+                      <div>
+                        <Label htmlFor="nombre">Nombre *</Label>
+                        <Input
+                          id="nombre"
+                          value={promotionForm.nombre}
+                          onChange={(e) => setPromotionForm({ ...promotionForm, nombre: e.target.value })}
+                          placeholder="Nombre de la promoción"
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="descripcion">Descripción</Label>
+                        <Textarea
+                          id="descripcion"
+                          value={promotionForm.descripcion}
+                          onChange={(e) => setPromotionForm({ ...promotionForm, descripcion: e.target.value })}
+                          placeholder="Descripción de la promoción"
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="tipoPromocion">Tipo de Promoción *</Label>
+                        <Select
+                          value={promotionForm.tipoPromocion}
+                          onValueChange={(value) => setPromotionForm({ ...promotionForm, tipoPromocion: value })}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Selecciona tipo" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="DESCUENTO_PORCENTAJE">Descuento Porcentaje</SelectItem>
+                            <SelectItem value="DESCUENTO_FIJO">Descuento Fijo</SelectItem>
+                            <SelectItem value="ENVIO_GRATIS">Envío Gratis</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <Label htmlFor="tipoCondicion">Condición *</Label>
+                        <Select
+                          value={promotionForm.tipoCondicion}
+                          onValueChange={(value) => setPromotionForm({ ...promotionForm, tipoCondicion: value })}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Selecciona condición" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="MONTO_MINIMO">Monto Mínimo</SelectItem>
+                            <SelectItem value="CANTIDAD_MINIMA">Cantidad Mínima</SelectItem>
+                            <SelectItem value="CATEGORIA_ESPECIFICA">Categoría Específica</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <Label htmlFor="valorDescuento">Valor del Descuento *</Label>
+                        <Input
+                          id="valorDescuento"
+                          type="number"
+                          step="0.01"
+                          value={promotionForm.valorDescuento}
+                          onChange={(e) => setPromotionForm({ ...promotionForm, valorDescuento: e.target.value })}
+                          placeholder="Ej: 0.1 para 10%"
+                        />
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <Label htmlFor="fechaInicio">Fecha de Inicio *</Label>
+                          <Input
+                            id="fechaInicio"
+                            type="datetime-local"
+                            value={promotionForm.fechaInicio}
+                            onChange={(e) => setPromotionForm({ ...promotionForm, fechaInicio: e.target.value })}
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor="fechaFin">Fecha de Fin *</Label>
+                          <Input
+                            id="fechaFin"
+                            type="datetime-local"
+                            value={promotionForm.fechaFin}
+                            onChange={(e) => setPromotionForm({ ...promotionForm, fechaFin: e.target.value })}
+                          />
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-4">
+                        <Switch
+                          checked={promotionForm.esAcumulable}
+                          onCheckedChange={(checked) => setPromotionForm({ ...promotionForm, esAcumulable: checked })}
+                        />
+                        <Label>Es Acumulable</Label>
+                      </div>
+                      <div className="flex items-center gap-4">
+                        <Switch
+                          checked={promotionForm.estaActiva}
+                          onCheckedChange={(checked) => setPromotionForm({ ...promotionForm, estaActiva: checked })}
+                        />
+                        <Label>Activa</Label>
+                      </div>
+                    </div>
+                    <DialogFooter>
+                      <Button 
+                        variant="outline" 
+                        onClick={() => { 
+                          setShowCreatePromotion(false); 
+                          resetPromotionForm(); 
+                        }}
+                      >
+                        Cancelar
+                      </Button>
+                      <Button onClick={handleCreatePromotion} className="bg-purple-600 hover:bg-purple-700 text-white">
+                        <Save className="h-4 w-4 mr-2" />
+                        {editingPromotion ? 'Actualizar' : 'Crear'}
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
               </div>
             )}
 
             {activeTab === 'coupons' && (
               <div className="space-y-6">
+                {/* Header de la sección de cupones */}
                 <div className="flex justify-between items-center">
                   <h3 className="text-2xl font-bold text-gray-900">Gestión de Cupones</h3>
                   <Button
@@ -920,6 +1281,7 @@ export function AdminDashboard() {
                   </Button>
                 </div>
 
+                {/* Filtros y búsqueda para cupones */}
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-4">
                     <div className="relative">
@@ -933,6 +1295,7 @@ export function AdminDashboard() {
                   </div>
                 </div>
 
+                {/* Tabla de cupones */}
                 <Card>
                   <CardContent className="p-0">
                     <Table>
@@ -962,16 +1325,248 @@ export function AdminDashboard() {
                                 </div>
                               </div>
                             </TableCell>
+                            <TableCell>
+                              <Badge
+                                variant={coupon.status === 'Activo' ? 'default' : 'secondary'}
+                                className={coupon.status === 'Activo' ? 'bg-purple-600 hover:bg-purple-700 cursor-pointer' : 'cursor-pointer'}
+                                onClick={() => handleToggleCouponStatus(coupon.id)}
+                              >
+                                {coupon.status}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="text-sm">{new Date(coupon.created).toLocaleDateString()}</TableCell>
+                            <TableCell className="text-right">
+                              <div className="flex items-center justify-end gap-2">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => {
+                                    console.log('Clicked Edit for coupon:', coupon); // Debug log
+                                    handleEditCoupon(coupon);
+                                  }}
+                                >
+                                  <Edit className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleDeleteCoupon(coupon.id)}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </TableCell>
                           </TableRow>
                         ))}
                       </TableBody>
                     </Table>
                   </CardContent>
                 </Card>
+
+                {/* Diálogo para cupones */}
+                <Dialog open={showCreateCoupon} onOpenChange={setShowCreateCoupon}>
+                  <DialogContent className="max-w-2xl">
+                    <DialogHeader>
+                      <DialogTitle>{editingCoupon ? 'Editar Cupón' : 'Nuevo Cupón'}</DialogTitle>
+                      <DialogDescription>
+                        {editingCoupon ? 'Modifica los detalles del cupón.' : 'Crea un nuevo cupón.'}
+                      </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4 py-4">
+                      <div>
+                        <Label htmlFor="codigo">Código *</Label>
+                        <Input
+                          id="codigo"
+                          value={couponForm.codigo}
+                          onChange={(e) => setCouponForm({ ...couponForm, codigo: e.target.value.toUpperCase() })}
+                          placeholder="Ej: SUMMER30"
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="tipo">Tipo de Descuento *</Label>
+                        <Select
+                          value={couponForm.tipo}
+                          onValueChange={(value) => setCouponForm({ ...couponForm, tipo: value })}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Selecciona tipo" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="porcentaje">Porcentaje</SelectItem>
+                            <SelectItem value="fijo">Fijo</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <Label htmlFor="descuento">Valor del Descuento *</Label>
+                        <Input
+                          id="descuento"
+                          type="number"
+                          step="0.01"
+                          value={couponForm.descuento}
+                          onChange={(e) => setCouponForm({ ...couponForm, descuento: e.target.value })}
+                          placeholder="Ej: 30 para 30% o $30"
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="usos">Usos Máximos</Label>
+                        <Input
+                          id="usos"
+                          type="number"
+                          value={couponForm.usos}
+                          onChange={(e) => setCouponForm({ ...couponForm, usos: e.target.value })}
+                          placeholder="Ej: 100"
+                        />
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <Label htmlFor="fecha_inicio">Fecha de Inicio *</Label>
+                          <Input
+                            id="fecha_inicio"
+                            type="datetime-local"
+                            value={couponForm.fecha_inicio}
+                            onChange={(e) => setCouponForm({ ...couponForm, fecha_inicio: e.target.value })}
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor="fecha_fin">Fecha de Fin *</Label>
+                          <Input
+                            id="fecha_fin"
+                            type="datetime-local"
+                            value={couponForm.fecha_fin}
+                            onChange={(e) => setCouponForm({ ...couponForm, fecha_fin: e.target.value })}
+                          />
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-4">
+                        <Switch
+                          checked={couponForm.isActive}
+                          onCheckedChange={(checked) => setCouponForm({ ...couponForm, isActive: checked })}
+                        />
+                        <Label>Activo</Label>
+                      </div>
+                    </div>
+                    <DialogFooter>
+                      <Button
+                        variant="outline"
+                        onClick={() => {
+                          setShowCreateCoupon(false);
+                          resetCouponForm();
+                        }}
+                      >
+                        Cancelar
+                      </Button>
+                      <Button onClick={editingCoupon ? handleUpdateCoupon : handleCreateCoupon} className="bg-purple-600 hover:bg-purple-700 text-white">
+                        <Save className="h-4 w-4 mr-2" />
+                        {editingCoupon ? 'Actualizar' : 'Crear'}
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
               </div>
             )}
-            {/* Resto de tu código */}
+
+            {activeTab === 'campaigns' && (
+              <div className="space-y-6">
+                {/* Header de la sección de campañas */}
+                <div className="flex justify-between items-center">
+                  <h3 className="text-2xl font-bold text-gray-900">Gestión de Campañas</h3>
+                  <Button
+                    onClick={() => setShowCreateCampaign(true)}
+                    className="bg-purple-600 hover:bg-purple-700 text-white"
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    Nueva Campaña
+                  </Button>
+                </div>
+
+                {/* Tabla de campañas */}
+                <Card>
+                  <CardContent className="p-0">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Nombre</TableHead>
+                          <TableHead>Inicio</TableHead>
+                          <TableHead>Fin</TableHead>
+                          <TableHead>Presupuesto</TableHead>
+                          <TableHead>Estado</TableHead>
+                          <TableHead className="text-right">Acciones</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {campaigns.map((campaign) => (
+                          <TableRow key={campaign.id}>
+                            <TableCell className="font-medium">{campaign.name}</TableCell>
+                            <TableCell>{new Date(campaign.startDate).toLocaleDateString()}</TableCell>
+                            <TableCell>{new Date(campaign.endDate).toLocaleDateString()}</TableCell>
+                            <TableCell>{campaign.budget}</TableCell>
+                            <TableCell>
+                              <Badge
+                                variant={campaign.status === 'Activa' ? 'default' : 'secondary'}
+                                className={campaign.status === 'Activa' ? 'bg-purple-600 hover:bg-purple-700 cursor-pointer' : 'cursor-pointer'}
+                                onClick={() => handleToggleCampaignStatus(campaign.id)}
+                              >
+                                {campaign.status}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <div className="flex items-center justify-end gap-2">
+                                <Button variant="ghost" size="sm" onClick={() => handleEditCampaign(campaign)}>
+                                  <Edit className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleDeleteCampaign(campaign.id)}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </CardContent>
+                </Card>
+
+                {/* Diálogo para campañas */}
+                <Dialog open={showCreateCampaign} onOpenChange={setShowCreateCampaign}>
+                  <DialogContent>
+                    <DialogHeader>
+                      <DialogTitle>{editingCampaign ? 'Editar Campaña' : 'Nueva Campaña'}</DialogTitle>
+                      <DialogDescription>
+                        {editingCampaign ? 'Modifica los detalles de la campaña.' : 'Crea una nueva campaña.'}
+                      </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4">
+                      <div>
+                        <Label htmlFor="name">Nombre *</Label>
+                        <Input
+                          id="name"
+                          value={campaignForm.name}
+                          onChange={(e) => setCampaignForm({ ...campaignForm, name: e.target.value })}
+                          placeholder="Nombre de la campaña"
+                        />
+                      </div>
+                    </div>
+                    <DialogFooter>
+                      <Button variant="outline" onClick={() => { setShowCreateCampaign(false); resetCampaignForm(); }}>
+                        Cancelar
+                      </Button>
+                      <Button onClick={handleCreateCampaign}>
+                        {editingCampaign ? 'Actualizar' : 'Crear'}
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
+              </div>
+            )}
           </main>
+
+          {/* Footer del dashboard */}
+          <Footer />
         </div>
       </div>
     </div>
