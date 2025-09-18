@@ -250,17 +250,24 @@ export function AdminDashboard() {
       const formattedStats = [
         {
           title: 'Promociones Activas',
-          value: data.promocionesActivas.toString(),
+          value: data?.promocionesActivas?.toString() ?? '0',
           change: '+2.5%',
           changeType: 'positive',
           icon: Tag,
         },
         {
-          title: 'Cupones Utilizados',
-          value: data.cuponesUtilizados.toString(),
+          title: 'Cupones Activos',
+          value: data?.cuponesActivos?.toString() ?? '0',
           change: '+12.3%',
           changeType: 'positive',
           icon: Gift,
+        },
+        {
+          title: 'Cupones Utilizados',
+          value: data?.cuponesUtilizados?.toString() ?? '0',
+          change: '+8.4%',
+          changeType: 'positive',
+          icon: Copy,
         },
         {
           title: 'Campañas en Curso',
@@ -277,6 +284,8 @@ export function AdminDashboard() {
           icon: TrendingUp,
         },
       ];
+      
+      
 
       setDashboardStats(formattedStats);
     } catch (error) {
