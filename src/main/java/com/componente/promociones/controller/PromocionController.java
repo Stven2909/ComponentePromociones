@@ -3,6 +3,7 @@ package com.componente.promociones.controller;
 import com.componente.promociones.model.dto.DashboardStatsDTO;
 import com.componente.promociones.model.dto.PromocionDTO;
 import com.componente.promociones.model.dto.entity.Promocion;
+import com.componente.promociones.service.CuponService;
 import com.componente.promociones.service.PromocionService;
 import jakarta.validation.Valid;
 import lombok.AllArgsConstructor;
@@ -21,6 +22,7 @@ import java.util.List;
 public class PromocionController {
 
     private final PromocionService promocionService;
+    private final CuponService cuponService;
 
     //Crear Promo
     @PostMapping
@@ -71,9 +73,17 @@ public class PromocionController {
     public ResponseEntity<DashboardStatsDTO> obtenerEstadisticasDashboard(){
         long promocionesActivas = promocionService.contarPromocionesActivas();
         long cuponesUtilizados = promocionService.contarCuponesUtilizados();
+        long cuponesActivos = promocionService.contarCuponesActivos();
 
-        DashboardStatsDTO stats = new DashboardStatsDTO(promocionesActivas, cuponesUtilizados);
+        DashboardStatsDTO stats = new DashboardStatsDTO(
+                promocionesActivas,
+                cuponesUtilizados,
+                cuponesActivos
+        );
+
         return ResponseEntity.ok(stats);
     }
+
+
 }
 

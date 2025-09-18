@@ -41,4 +41,6 @@ public interface PromocionRepository extends JpaRepository<Promocion, Long> {
      * Cuenta las promociones activas
      */
     long countByEstaActivaTrue();
+
+
 }

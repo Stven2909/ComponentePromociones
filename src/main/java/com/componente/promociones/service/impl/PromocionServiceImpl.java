@@ -2,6 +2,7 @@ package com.componente.promociones.service.impl;
 
 import com.componente.promociones.model.dto.PromocionDTO;
 import com.componente.promociones.model.dto.entity.Promocion;
+import com.componente.promociones.repository.CuponRepository;
 import com.componente.promociones.repository.PromocionRepository;
 import com.componente.promociones.service.PromocionService;
 import lombok.RequiredArgsConstructor;
@@ -16,6 +17,7 @@ import java.util.stream.Collectors;
 public class PromocionServiceImpl implements PromocionService {
 
     private final PromocionRepository promocionRepository;
+    private final CuponRepository cuponRepository;
 
     @Override
     public PromocionDTO crearPromocion(PromocionDTO dto) {
@@ -81,8 +83,13 @@ public class PromocionServiceImpl implements PromocionService {
     }
 
     @Override
+    public long contarCuponesActivos() {
+        return cuponRepository.countByEstado("ACTIVO");
+    }
+
+    @Override
     public long contarCuponesUtilizados() {
-        return 1234; //valor de ejemplo, hasta que se haga el CuponesRepository
+        return cuponRepository.countByUsosActualesGreaterThan(0);
     }
 
     /**

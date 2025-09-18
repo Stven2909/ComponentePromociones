@@ -14,5 +14,8 @@ public interface PromocionService {
 
     List<PromocionDTO> listarPromocionesActivas();
     long contarPromocionesActivas();
+
+    //para cupones
+    long contarCuponesActivos();
     long contarCuponesUtilizados();
 }
