@@ -82,7 +82,6 @@ export function AdminDashboard() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [viewingPromotion, setViewingPromotion] = useState<Promocion | null>(null);
 
-  
   // Estados para diálogos y edición
   const [showCreatePromotion, setShowCreatePromotion] = useState(false);
   const [showCreateCoupon, setShowCreateCoupon] = useState(false);
@@ -135,7 +134,7 @@ export function AdminDashboard() {
   const [dashboardStats, setDashboardStats] = useState([]);
   const [loadingStats, setLoadingStats] = useState(true);
   const [errorStats, setErrorStats] = useState(null);
-  
+
   // Datos mockeados para campañas
   const [campaigns, setCampaigns] = useState([
     {
@@ -286,8 +285,6 @@ export function AdminDashboard() {
           icon: TrendingUp,
         },
       ];
-      
-      
 
       setDashboardStats(formattedStats);
     } catch (error) {
@@ -311,84 +308,82 @@ export function AdminDashboard() {
     }
   }, [activeTab]);
 
-
   // Función para ver detalles de una promoción (abre diálogo modal)
   const handleViewPromotion = (promotion: Promocion) => {
     setViewingPromotion(promotion);
   };
 
-
   // Función para crear o actualizar una promoción
-const handleCreatePromotion = async () => {
-  console.log('handleCreatePromotion called with form:', promotionForm);
-  try {
-    if (
-      !promotionForm.nombre.trim() ||
-      promotionForm.valorDescuento === '' ||
-      !promotionForm.fechaInicio ||
-      !promotionForm.fechaFin
-    ) {
-      throw new Error('Por favor, completa todos los campos requeridos');
+  const handleCreatePromotion = async () => {
+    console.log('handleCreatePromotion called with form:', promotionForm);
+    try {
+      if (
+        !promotionForm.nombre.trim() ||
+        promotionForm.valorDescuento === '' ||
+        !promotionForm.fechaInicio ||
+        !promotionForm.fechaFin
+      ) {
+        throw new Error('Por favor, completa todos los campos requeridos');
+      }
+
+      // Convertir fechas al formato ISO para el backend (LocalDateTime)
+      const fechaInicio = new Date(promotionForm.fechaInicio).toISOString().slice(0, 19).replace('T', ' ');
+      const fechaFin = new Date(promotionForm.fechaFin).toISOString().slice(0, 19).replace('T', ' ');
+
+      console.log('Formatted dates:', fechaInicio, fechaFin);
+
+      const payload = {
+        ...promotionForm,
+        valorDescuento: parseFloat(promotionForm.valorDescuento) || 0,
+        fechaInicio,
+        fechaFin,
+      };
+
+      console.log('Payload to send:', payload);
+
+      const url = editingPromotion ? `${API_BASE_URL}/${editingPromotion.id}` : API_BASE_URL;
+      const method = editingPromotion ? 'PUT' : 'POST';
+
+      const response = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+        credentials: 'include',
+      });
+
+      console.log('Response status:', response.status);
+      const responseData = await response.json().catch(() => null);
+      console.log('Response data:', responseData);
+
+      if (!response.ok) {
+        throw new Error(
+          responseData?.message ||
+            `Error ${response.status}: ${editingPromotion ? 'Error al actualizar promoción' : 'Error al crear promoción'}`
+        );
+      }
+
+      toast({
+        title: 'Éxito',
+        description: editingPromotion ? 'Promoción actualizada correctamente' : 'Promoción creada correctamente',
+      });
+
+      setShowCreatePromotion(false);
+      resetPromotionForm();
+      fetchPromociones(); // Recargar la lista
+    } catch (error) {
+      console.error('Error creating/updating promoción:', error);
+      toast({
+        title: 'Error',
+        description:
+          error instanceof Error
+            ? error.message
+            : editingPromotion
+            ? 'No se pudo actualizar la promoción'
+            : 'No se pudo crear la promoción',
+        variant: 'destructive',
+      });
     }
-
-    // Convertir fechas al formato ISO para el backend (LocalDateTime)
-    const fechaInicio = new Date(promotionForm.fechaInicio).toISOString().slice(0, 19).replace('T', ' ');
-    const fechaFin = new Date(promotionForm.fechaFin).toISOString().slice(0, 19).replace('T', ' ');
-
-    console.log('Formatted dates:', fechaInicio, fechaFin);
-
-    const payload = {
-      ...promotionForm,
-      valorDescuento: parseFloat(promotionForm.valorDescuento) || 0,
-      fechaInicio,
-      fechaFin,
-    };
-
-    console.log('Payload to send:', payload);
-
-    const url = editingPromotion ? `${API_BASE_URL}/${editingPromotion.id}` : API_BASE_URL;
-    const method = editingPromotion ? 'PUT' : 'POST';
-
-    const response = await fetch(url, {
-      method,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-      credentials: 'include',
-    });
-
-    console.log('Response status:', response.status);
-    const responseData = await response.json().catch(() => null);
-    console.log('Response data:', responseData);
-
-    if (!response.ok) {
-      throw new Error(
-        responseData?.message ||
-          `Error ${response.status}: ${editingPromotion ? 'Error al actualizar promoción' : 'Error al crear promoción'}`
-      );
-    }
-
-    toast({
-      title: 'Éxito',
-      description: editingPromotion ? 'Promoción actualizada correctamente' : 'Promoción creada correctamente',
-    });
-
-    setShowCreatePromotion(false);
-    resetPromotionForm();
-    fetchPromociones(); // Recargar la lista
-  } catch (error) {
-    console.error('Error creating/updating promoción:', error);
-    toast({
-      title: 'Error',
-      description:
-        error instanceof Error
-          ? error.message
-          : editingPromotion
-          ? 'No se pudo actualizar la promoción'
-          : 'No se pudo crear la promoción',
-      variant: 'destructive',
-    });
-  }
-};
+  };
 
   // Función para editar una promoción (abre el diálogo con datos precargados)
   const handleEditPromotion = (promotion: Promocion) => {
@@ -604,7 +599,7 @@ const handleCreatePromotion = async () => {
         // Manejar formato ISO 8601 (YYYY-MM-DDTHH:mm:ss) o formato con espacio (YYYY-MM-DD HH:mm:ss)
         const isoMatch = dateString.match(/^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})/);
         const spaceMatch = dateString.match(/^(\d{4}-\d{2}-\d{2})\s(\d{2}:\d{2})/);
-        
+
         if (isoMatch) {
           return `${isoMatch[1]}T${isoMatch[2]}`; // Convierte 2025-09-17T12:00:00 a 2025-09-17T12:00
         } else if (spaceMatch) {
@@ -838,7 +833,7 @@ const handleCreatePromotion = async () => {
   const handleToggleCampaignStatus = (campaignId: number) => {
     setCampaigns(
       campaigns.map((c) =>
-        c.id === campaignId ? { ...c, status: c.status === 'Activa' ? 'Pausada' : 'Actbruniva' } : c,
+        c.id === campaignId ? { ...c, status: c.status === 'Activa' ? 'Pausada' : 'Activa' } : c,
       ),
     );
     fetchDashboardStats();
@@ -853,336 +848,647 @@ const handleCreatePromotion = async () => {
     }
   };
 
-// Items del sidebar
-const sidebarItems = [
-  { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
-  { id: 'promotions', label: 'Promociones', icon: Tag },
-  { id: 'coupons', label: 'Cupones', icon: Gift },
-  { id: 'campaigns', label: 'Campañas', icon: Calendar },
-];
+  // Items del sidebar
+  const sidebarItems = [
+    { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
+    { id: 'promotions', label: 'Promociones', icon: Tag },
+    { id: 'coupons', label: 'Cupones', icon: Gift },
+    { id: 'campaigns', label: 'Campañas', icon: Calendar },
+  ];
 
-return (
-  <div className="flex flex-col h-screen bg-white">
-    {/* Header del dashboard */}
-    <Header onMenuClick={() => setSidebarOpen(!sidebarOpen)} />
+  return (
+    <div className="flex flex-col h-screen bg-white">
+      {/* Header del dashboard */}
+      <Header onMenuClick={() => setSidebarOpen(!sidebarOpen)} />
 
-    <div className="flex flex-1 overflow-hidden">
-      {/* Sidebar navegable */}
-      <div
-        className={`${sidebarOpen ? 'w-64' : 'w-16'} transition-all duration-300 bg-slate-900 border-r border-slate-800`}
-      >
-        <div className="p-4">
-          <div className="flex items-center gap-2 mb-8">
-            <div className="w-8 h-8 bg-gradient-to-r from-purple-600 to-blue-600 rounded-lg flex items-center justify-center">
-              <Store className="h-5 w-5 text-white" />
+      <div className="flex flex-1 overflow-hidden">
+        {/* Sidebar navegable */}
+        <div
+          className={`${sidebarOpen ? 'w-64' : 'w-16'} transition-all duration-300 bg-slate-900 border-r border-slate-800`}
+        >
+          <div className="p-4">
+            <div className="flex items-center gap-2 mb-8">
+              <div className="w-8 h-8 bg-gradient-to-r from-purple-600 to-blue-600 rounded-lg flex items-center justify-center">
+                <Store className="h-5 w-5 text-white" />
+              </div>
+              {sidebarOpen && <h1 className="text-xl font-bold text-white">Panel Promociones</h1>}
             </div>
-            {sidebarOpen && <h1 className="text-xl font-bold text-white">Panel Promociones</h1>}
-          </div>
 
-          <nav className="space-y-2">
-            {sidebarItems.map((item) => {
-              const Icon = item.icon;
-              return (
-                <button
-                  key={item.id}
-                  onClick={() => setActiveTab(item.id)}
-                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-colors ${
-                    activeTab === item.id
-                      ? 'bg-purple-600 text-white'
-                      : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-                  }`}
-                >
-                  <Icon className="h-5 w-5" />
-                  {sidebarOpen && <span>{item.label}</span>}
-                </button>
-              );
-            })}
-          </nav>
+            <nav className="space-y-2">
+              {sidebarItems.map((item) => {
+                const Icon = item.icon;
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => setActiveTab(item.id)}
+                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-colors ${
+                      activeTab === item.id
+                        ? 'bg-purple-600 text-white'
+                        : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                    }`}
+                  >
+                    <Icon className="h-5 w-5" />
+                    {sidebarOpen && <span>{item.label}</span>}
+                  </button>
+                );
+              })}
+            </nav>
+          </div>
+        </div>
+
+        {/* Contenido principal */}
+        <div className="flex-1 flex flex-col overflow-hidden">
+          <main className="flex-1 overflow-auto p-6 bg-gray-50">
+            {activeTab === 'dashboard' && (
+              <div className="space-y-6">
+                {/* Grid de estadísticas del dashboard */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                  {loadingStats ? (
+                    <p>Cargando estadísticas...</p>
+                  ) : errorStats ? (
+                    <p className="text-red-500">Error: {errorStats}</p>
+                  ) : (
+                    dashboardStats.map((stat, index) => {
+                      const Icon = stat.icon;
+                      return (
+                        <Card key={index} className="bg-white border border-gray-200">
+                          <CardContent className="p-6">
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <p className="text-sm font-medium text-gray-600">{stat.title}</p>
+                                <p className="text-2xl font-bold text-gray-900">{stat.value}</p>
+                                <p className="text-sm text-purple-400 mt-1">{stat.change} Este mes</p>
+                              </div>
+                              <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
+                                <Icon className="h-6 w-6 text-purple-600" />
+                              </div>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      );
+                    })
+                  )}
+                </div>
+
+                {/* Tabla de promociones activas en dashboard */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Promociones Activas</CardTitle>
+                    <CardDescription>Resumen de las promociones actualmente en funcionamiento.</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Promoción</TableHead>
+                          <TableHead>Tipo</TableHead>
+                          <TableHead>Descuento</TableHead>
+                          <TableHead>Estado</TableHead>
+                          <TableHead>Expira</TableHead>
+                          <TableHead className="text-right">Acciones</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {promociones.slice(0, 4).map((promo) => (
+                          <TableRow key={promo.id}>
+                            <TableCell>
+                              <div>
+                                <div className="font-medium">{promo.nombre}</div>
+                                <div className="text-sm text-muted-foreground">{promo.id}</div>
+                              </div>
+                            </TableCell>
+                            <TableCell>{promo.tipoPromocion}</TableCell>
+                            <TableCell className="font-medium text-purple-600">
+                              {promo.valorDescuento * 100}%
+                            </TableCell>
+                            <TableCell>
+                              <Badge
+                                variant={promo.estaActiva ? 'default' : 'secondary'}
+                                className={promo.estaActiva ? 'bg-purple-600 hover:bg-purple-700' : ''}
+                              >
+                                {promo.estaActiva ? 'Activa' : 'Pausada'}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="text-sm">
+                              {new Date(promo.fechaFin).toLocaleDateString()}
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <div className="flex items-center justify-end gap-2">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => {
+                                    console.log('Clicked View for promotion:', promo.id); // Debug log
+                                    handleViewPromotion(promo);
+                                  }}
+                                >
+                                  <Eye className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </CardContent>
+                </Card>
+
+                {/* Sección de actividad reciente */}
+                <Card className="bg-white border-gray-200">
+                  <CardHeader>
+                    <CardTitle className="text-gray-900">Actividad Reciente</CardTitle>
+                    <CardDescription className="text-gray-600">Últimas acciones en promociones</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-4">
+                      {recentActivity.map((activity, index) => (
+                        <div key={index} className="flex items-center gap-4 p-3 bg-gray-50 rounded-lg">
+                          <div className="w-2 h-2 bg-purple-600 rounded-full"></div>
+                          <div className="flex-1">
+                            <p className="text-sm font-medium text-gray-900">{activity.action}</p>
+                            <p className="text-xs text-gray-500">{activity.time}</p>
+                          </div>
+                          <Badge
+                            variant={activity.type === 'success' ? 'default' : 'secondary'}
+                            className="bg-purple-100 text-purple-800"
+                          >
+                            {activity.status}
+                          </Badge>
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            )}
+
+            {activeTab === 'promotions' && (
+              <div className="space-y-6">
+                {/* Header de la sección de promociones */}
+                <div className="flex justify-between items-center">
+                  <h3 className="text-2xl font-bold text-gray-900">Gestión de Promociones</h3>
+                  <Button
+                    onClick={() => setShowCreatePromotion(true)}
+                    className="bg-purple-600 hover:bg-purple-700 text-white"
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    Nueva Promoción
+                  </Button>
+                </div>
+
+                {/* Filtros y búsqueda */}
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Input placeholder="Buscar promociones..." className="pl-10 w-80" />
+                    </div>
+                    <Select defaultValue="all">
+                      <SelectTrigger className="w-40">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Todas</SelectItem>
+                        <SelectItem value="active">Activas</SelectItem>
+                        <SelectItem value="paused">Pausadas</SelectItem>
+                        <SelectItem value="expired">Expiradas</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                {/* Tabla de promociones */}
+                <Card>
+                  <CardContent className="p-0">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Promoción</TableHead>
+                          <TableHead>Tipo</TableHead>
+                          <TableHead>Descuento</TableHead>
+                          <TableHead>Horario</TableHead>
+                          <TableHead>Estado</TableHead>
+                          <TableHead>Expira</TableHead>
+                          <TableHead className="text-right">Acciones</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {promociones.map((promo) => (
+                          <TableRow key={promo.id}>
+                            <TableCell>
+                              <div>
+                                <div className="font-medium">{promo.nombre}</div>
+                                <div className="text-sm text-muted-foreground">{promo.descripcion}</div>
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant="outline">{promo.tipoPromocion}</Badge>
+                            </TableCell>
+                            <TableCell className="font-medium text-purple-600">
+                              {promo.valorDescuento * 100}%
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex items-center gap-1 text-sm">
+                                <Clock className="h-3 w-3" />
+                                {new Date(promo.fechaInicio).toLocaleTimeString()} -{' '}
+                                {new Date(promo.fechaFin).toLocaleTimeString()}
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <Badge
+                                variant={promo.estaActiva ? 'default' : 'secondary'}
+                                className={
+                                  promo.estaActiva
+                                    ? 'bg-purple-600 hover:bg-purple-700 cursor-pointer'
+                                    : 'cursor-pointer'
+                                }
+                                onClick={() => handleTogglePromotionStatus(promo.id)}
+                              >
+                                {promo.estaActiva ? 'Activa' : 'Pausada'}
+                              </Badge>
+                            </TableCell>
+                            <TableCell>{new Date(promo.fechaFin).toLocaleDateString()}</TableCell>
+                            <TableCell className="text-right">
+                              <div className="flex items-center justify-end gap-2">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleViewPromotion(promo)}
+                                >
+                                  <Eye className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleEditPromotion(promo)}
+                                >
+                                  <Edit className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleDeletePromotion(promo.id)}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </CardContent>
+                </Card>
+
+                {/* Diálogo para crear/editar promoción */}
+                <Dialog open={showCreatePromotion} onOpenChange={setShowCreatePromotion}>
+                  <DialogContent className="max-w-md">
+                    <DialogHeader>
+                      <DialogTitle>{editingPromotion ? 'Editar Promoción' : 'Crear Promoción'}</DialogTitle>
+                      <DialogDescription>
+                        {editingPromotion ? 'Edita los detalles de la promoción.' : 'Crea una nueva promoción.'}
+                      </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4">
+                      <div>
+                        <Label htmlFor="nombre">Nombre</Label>
+                        <Input
+                          id="nombre"
+                          value={promotionForm.nombre}
+                          onChange={(e) => setPromotionForm({ ...promotionForm, nombre: e.target.value })}
+                          placeholder="Nombre de la promoción"
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="descripcion">Descripción</Label>
+                        <Textarea
+                          id="descripcion"
+                          value={promotionForm.descripcion}
+                          onChange={(e) => setPromotionForm({ ...promotionForm, descripcion: e.target.value })}
+                          placeholder="Descripción de la promoción"
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="tipoPromocion">Tipo de Promoción</Label>
+                        <Select
+                          value={promotionForm.tipoPromocion}
+                          onValueChange={(value) => setPromotionForm({ ...promotionForm, tipoPromocion: value })}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Selecciona un tipo" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="DESCUENTO_PORCENTAJE">Descuento Porcentaje</SelectItem>
+                            <SelectItem value="DESCUENTO_FIJO">Descuento Fijo</SelectItem>
+                            <SelectItem value="2X1">2x1</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <Label htmlFor="tipoCondicion">Condición</Label>
+                        <Select
+                          value={promotionForm.tipoCondicion}
+                          onValueChange={(value) => setPromotionForm({ ...promotionForm, tipoCondicion: value })}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Selecciona una condición" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="MONTO_MINIMO">Monto Mínimo</SelectItem>
+                            <SelectItem value="CANTIDAD_MINIMA">Cantidad Mínima</SelectItem>
+                            <SelectItem value="PRODUCTO_ESPECIFICO">Producto Específico</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <Label htmlFor="valorDescuento">Valor del Descuento</Label>
+                        <Input
+                          id="valorDescuento"
+                          type="number"
+                          value={promotionForm.valorDescuento}
+                          onChange={(e) => setPromotionForm({ ...promotionForm, valorDescuento: e.target.value })}
+                          placeholder="Ej. 0.1 para 10%"
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="fechaInicio">Fecha de Inicio</Label>
+                        <Input
+                          id="fechaInicio"
+                          type="datetime-local"
+                          value={promotionForm.fechaInicio}
+                          onChange={(e) => setPromotionForm({ ...promotionForm, fechaInicio: e.target.value })}
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="fechaFin">Fecha de Fin</Label>
+                        <Input
+                          id="fechaFin"
+                          type="datetime-local"
+                          value={promotionForm.fechaFin}
+                          onChange={(e) => setPromotionForm({ ...promotionForm, fechaFin: e.target.value })}
+                        />
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Switch
+                          id="esAcumulable"
+                          checked={promotionForm.esAcumulable}
+                          onCheckedChange={(checked) => setPromotionForm({ ...promotionForm, esAcumulable: checked })}
+                        />
+                        <Label htmlFor="esAcumulable">Acumulable</Label>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Switch
+                          id="estaActiva"
+                          checked={promotionForm.estaActiva}
+                          onCheckedChange={(checked) => setPromotionForm({ ...promotionForm, estaActiva: checked })}
+                        />
+                        <Label htmlFor="estaActiva">Activa</Label>
+                      </div>
+                    </div>
+                    <DialogFooter>
+                      <Button variant="outline" onClick={() => { setShowCreatePromotion(false); resetPromotionForm(); }}>
+                        Cancelar
+                      </Button>
+                      <Button onClick={handleCreatePromotion}>
+                        {editingPromotion ? 'Actualizar' : 'Crear'}
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
+              </div>
+            )}
+
+            {activeTab === 'coupons' && (
+              <div className="space-y-6">
+                {/* Header de la sección de cupones */}
+                <div className="flex justify-between items-center">
+                  <h3 className="text-2xl font-bold text-gray-900">Gestión de Cupones</h3>
+                  <Button
+                    onClick={() => setShowCreateCoupon(true)}
+                    className="bg-purple-600 hover:bg-purple-700 text-white"
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    Nuevo Cupón
+                  </Button>
+                </div>
+
+                {/* Filtros y búsqueda */}
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Input placeholder="Buscar cupones..." className="pl-10 w-80" />
+                    </div>
+                    <Select defaultValue="all">
+                      <SelectTrigger className="w-40">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Todos</SelectItem>
+                        <SelectItem value="active">Activos</SelectItem>
+                        <SelectItem value="inactive">Inactivos</SelectItem>
+                        <SelectItem value="expired">Expirados</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                {/* Tabla de cupones */}
+                <Card>
+                  <CardContent className="p-0">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Código</TableHead>
+                          <TableHead>Tipo</TableHead>
+                          <TableHead>Descuento</TableHead>
+                          <TableHead>Usos</TableHead>
+                          <TableHead>Estado</TableHead>
+                          <TableHead>Expira</TableHead>
+                          <TableHead className="text-right">Acciones</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {coupons.map((coupon) => (
+                          <TableRow key={coupon.id}>
+                            <TableCell>
+                              <div>
+                                <div className="font-medium">{coupon.code}</div>
+                                <div className="text-sm text-muted-foreground">{coupon.id}</div>
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant="outline">{coupon.type}</Badge>
+                            </TableCell>
+                            <TableCell className="font-medium text-purple-600">
+                              {coupon.type === 'Porcentaje' ? `${coupon.discount}%` : `$${coupon.discount}`}
+                            </TableCell>
+                            <TableCell>{`${coupon.uses}/${coupon.maxUses}`}</TableCell>
+                            <TableCell>
+                              <Badge
+                                variant={coupon.status === 'Activo' ? 'default' : 'secondary'}
+                                className={
+                                  coupon.status === 'Activo'
+                                    ? 'bg-purple-600 hover:bg-purple-700 cursor-pointer'
+                                    : 'cursor-pointer'
+                                }
+                                onClick={() => handleToggleCouponStatus(coupon.id)}
+                              >
+                                {coupon.status}
+                              </Badge>
+                            </TableCell>
+                            <TableCell>{new Date(coupon.created).toLocaleDateString()}</TableCell>
+                            <TableCell className="text-right">
+                              <div className="flex items-center justify-end gap-2">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleEditCoupon(coupon)}
+                                >
+                                  <Edit className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleDeleteCoupon(coupon.id)}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </CardContent>
+                </Card>
+
+                {/* Diálogo para crear/editar cupón */}
+                <Dialog open={showCreateCoupon} onOpenChange={setShowCreateCoupon}>
+                  <DialogContent className="max-w-md">
+                    <DialogHeader>
+                      <DialogTitle>{editingCoupon ? 'Editar Cupón' : 'Crear Cupón'}</DialogTitle>
+                      <DialogDescription>
+                        {editingCoupon ? 'Edita los detalles del cupón.' : 'Crea un nuevo cupón.'}
+                      </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4">
+                      <div>
+                        <Label htmlFor="codigo">Código</Label>
+                        <Input
+                          id="codigo"
+                          value={couponForm.codigo}
+                          onChange={(e) => setCouponForm({ ...couponForm, codigo: e.target.value })}
+                          placeholder="Código del cupón"
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="tipo">Tipo de Descuento</Label>
+                        <Select
+                          value={couponForm.tipo}
+                          onValueChange={(value) => setCouponForm({ ...couponForm, tipo: value })}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Selecciona un tipo" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="porcentaje">Porcentaje</SelectItem>
+                            <SelectItem value="fijo">Fijo</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <Label htmlFor="descuento">Descuento</Label>
+                        <Input
+                          id="descuento"
+                          type="number"
+                          value={couponForm.descuento}
+                          onChange={(e) => setCouponForm({ ...couponForm, descuento: e.target.value })}
+                          placeholder="Ej. 10 para 10% o $10"
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="usos">Usos Máximos</Label>
+                        <Input
+                          id="usos"
+                          type="number"
+                          value={couponForm.usos}
+                          onChange={(e) => setCouponForm({ ...couponForm, usos: e.target.value })}
+                          placeholder="Número de usos máximos"
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="fecha_inicio">Fecha de Inicio</Label>
+                        <Input
+                          id="fecha_inicio"
+                          type="datetime-local"
+                          value={couponForm.fecha_inicio}
+                          onChange={(e) => setCouponForm({ ...couponForm, fecha_inicio: e.target.value })}
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="fecha_fin">Fecha de Fin</Label>
+                        <Input
+                          id="fecha_fin"
+                          type="datetime-local"
+                          value={couponForm.fecha_fin}
+                          onChange={(e) => setCouponForm({ ...couponForm, fecha_fin: e.target.value })}
+                        />
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Switch
+                          id="isActive"
+                          checked={couponForm.isActive}
+                          onCheckedChange={(checked) => setCouponForm({ ...couponForm, isActive: checked })}
+                        />
+                        <Label htmlFor="isActive">Activo</Label>
+                      </div>
+                    </div>
+                    <DialogFooter>
+                      <Button variant="outline" onClick={() => { setShowCreateCoupon(false); resetCouponForm(); }}>
+                        Cancelar
+                      </Button>
+                      <Button onClick={editingCoupon ? handleUpdateCoupon : handleCreateCoupon}>
+                        {editingCoupon ? 'Actualizar' : 'Crear'}
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
+              </div>
+            )}
+
+            {/* Diálogo para mostrar detalles de la promoción */}
+            <Dialog open={!!viewingPromotion} onOpenChange={(open) => { if (!open) setViewingPromotion(null); }}>
+              <DialogContent className="max-w-md">
+                <DialogHeader>
+                  <DialogTitle>Detalles de la Promoción</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-2 py-4 text-sm">
+                  {viewingPromotion && (
+                    <>
+                      <p><strong>Nombre:</strong> {viewingPromotion.nombre}</p>
+                      <p><strong>Descripción:</strong> {viewingPromotion.descripcion}</p>
+                      <p><strong>Tipo:</strong> {viewingPromotion.tipoPromocion}</p>
+                      <p><strong>Condición:</strong> {viewingPromotion.tipoCondicion}</p>
+                      <p><strong>Descuento:</strong> {viewingPromotion.valorDescuento * 100}%</p>
+                      <p><strong>Inicio:</strong> {new Date(viewingPromotion.fechaInicio).toLocaleString()}</p>
+                      <p><strong>Fin:</strong> {new Date(viewingPromotion.fechaFin).toLocaleString()}</p>
+                      <p><strong>Acumulable:</strong> {viewingPromotion.esAcumulable ? 'Sí' : 'No'}</p>
+                      <p><strong>Estado:</strong> {viewingPromotion.estaActiva ? 'Activa' : 'Pausada'}</p>
+                    </>
+                  )}
+                </div>
+                <DialogFooter>
+                  <Button onClick={() => setViewingPromotion(null)}>Cerrar</Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          </main>
+
+          {/* Footer del dashboard */}
+          <Footer />
         </div>
       </div>
-
-      {/* Contenido principal */}
-      <div className="flex-1 flex flex-col overflow-hidden">
-        <main className="flex-1 overflow-auto p-6 bg-gray-50">
-          {activeTab === 'dashboard' && (
-            <div className="space-y-6">
-              {/* Grid de estadísticas del dashboard */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                {loadingStats ? (
-                  <p>Cargando estadísticas...</p>
-                ) : errorStats ? (
-                  <p className="text-red-500">Error: {errorStats}</p>
-                ) : (
-                  dashboardStats.map((stat, index) => {
-                    const Icon = stat.icon;
-                    return (
-                      <Card key={index} className="bg-white border border-gray-200">
-                        <CardContent className="p-6">
-                          <div className="flex items-center justify-between">
-                            <div>
-                              <p className="text-sm font-medium text-gray-600">{stat.title}</p>
-                              <p className="text-2xl font-bold text-gray-900">{stat.value}</p>
-                              <p className="text-sm text-purple-400 mt-1">{stat.change} Este mes</p>
-                            </div>
-                            <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
-                              <Icon className="h-6 w-6 text-purple-600" />
-                            </div>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    );
-                  })
-                )}
-              </div>
-              
-              {/* Tabla de promociones activas en dashboard */}
-              <Card>
-                <CardHeader>
-                  <CardTitle>Promociones Activas</CardTitle>
-                  <CardDescription>Resumen de las promociones actualmente en funcionamiento.</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Promoción</TableHead>
-                        <TableHead>Tipo</TableHead>
-                        <TableHead>Descuento</TableHead>
-                        <TableHead>Estado</TableHead>
-                        <TableHead>Expira</TableHead>
-                        <TableHead className="text-right">Acciones</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {promociones.slice(0, 4).map((promo) => (
-                        <TableRow key={promo.id}>
-                          <TableCell>
-                            <div>
-                              <div className="font-medium">{promo.nombre}</div>
-                              <div className="text-sm text-muted-foreground">{promo.id}</div>
-                            </div>
-                          </TableCell>
-                          <TableCell>{promo.tipoPromocion}</TableCell>
-                          <TableCell className="font-medium text-purple-600">
-                            {promo.valorDescuento * 100}%
-                          </TableCell>
-                          <TableCell>
-                            <Badge
-                              variant={promo.estaActiva ? 'default' : 'secondary'}
-                              className={promo.estaActiva ? 'bg-purple-600 hover:bg-purple-700' : ''}
-                            >
-                              {promo.estaActiva ? 'Activa' : 'Pausada'}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="text-sm">
-                            {new Date(promo.fechaFin).toLocaleDateString()}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <div className="flex items-center justify-end gap-2">
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => {
-                                  console.log('Clicked View for promotion:', promo.id); // Debug log
-                                  handleViewPromotion(promo);
-                                }}
-                              >
-                                <Eye className="h-4 w-4" />
-                              </Button>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </CardContent>
-              </Card>
-
-              {/* Sección de actividad reciente */}
-              <Card className="bg-white border-gray-200">
-                <CardHeader>
-                  <CardTitle className="text-gray-900">Actividad Reciente</CardTitle>
-                  <CardDescription className="text-gray-600">Últimas acciones en promociones</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    {recentActivity.map((activity, index) => (
-                      <div key={index} className="flex items-center gap-4 p-3 bg-gray-50 rounded-lg">
-                        <div className="w-2 h-2 bg-purple-600 rounded-full"></div>
-                        <div className="flex-1">
-                          <p className="text-sm font-medium text-gray-900">{activity.action}</p>
-                          <p className="text-xs text-gray-500">{activity.time}</p>
-                        </div>
-                        <Badge
-                          variant={activity.type === 'success' ? 'default' : 'secondary'}
-                          className="bg-purple-100 text-purple-800"
-                        >
-                          {activity.status}
-                        </Badge>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-          )}
-
-          {activeTab === 'promotions' && (
-            <div className="space-y-6">
-              {/* Header de la sección de promociones */}
-              <div className="flex justify-between items-center">
-                <h3 className="text-2xl font-bold text-gray-900">Gestión de Promociones</h3>
-                <Button
-                  onClick={() => setShowCreatePromotion(true)}
-                  className="bg-purple-600 hover:bg-purple-700 text-white"
-                >
-                  <Plus className="h-4 w-4 mr-2" />
-                  Nueva Promoción
-                </Button>
-              </div>
-
-              {/* Filtros y búsqueda */}
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input placeholder="Buscar promociones..." className="pl-10 w-80" />
-                  </div>
-                  <Select defaultValue="all">
-                    <SelectTrigger className="w-40">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">Todas</SelectItem>
-                      <SelectItem value="active">Activas</SelectItem>
-                      <SelectItem value="paused">Pausadas</SelectItem>
-                      <SelectItem value="expired">Expiradas</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              {/* Tabla de promociones */}
-              <Card>
-                <CardContent className="p-0">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Promoción</TableHead>
-                        <TableHead>Tipo</TableHead>
-                        <TableHead>Descuento</TableHead>
-                        <TableHead>Horario</TableHead>
-                        <TableHead>Estado</TableHead>
-                        <TableHead>Expira</TableHead>
-                        <TableHead className="text-right">Acciones</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {promociones.map((promo) => (
-                        <TableRow key={promo.id}>
-                          <TableCell>
-                            <div>
-                              <div className="font-medium">{promo.nombre}</div>
-                              <div className="text-sm text-muted-foreground">{promo.descripcion}</div>
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <Badge variant="outline">{promo.tipoPromocion}</Badge>
-                          </TableCell>
-                          <TableCell className="font-medium text-purple-600">
-                            {promo.valorDescuento * 100}%
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex items-center gap-1 text-sm">
-                              <Clock className="h-3 w-3" />
-                              {new Date(promo.fechaInicio).toLocaleTimeString()} -{' '}
-                              {new Date(promo.fechaFin).toLocaleTimeString()}
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <Badge
-                              variant={promo.estaActiva ? 'default' : 'secondary'}
-                              className={
-                                promo.estaActiva
-                                  ? 'bg-purple-600 hover:bg-purple-700 cursor-pointer'
-                                  : 'cursor-pointer'
-                              }
-                              onClick={() => handleTogglePromotionStatus(promo.id)}
-                            >
-                              {promo.estaActiva ? 'Activa' : 'Pausada'}
-                            </Badge>
-                          </TableCell>
-                          <TableCell>{new Date(promo.fechaFin).toLocaleDateString()}</TableCell>
-                          <TableCell className="text-right">
-                            <div className="flex items-center justify-end gap-2">
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => handleViewPromotion(promo)}
-                              >
-                                <Eye className="h-4 w-4" />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => handleEditPromotion(promo)}
-                              >
-                                <Edit className="h-4 w-4" />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => handleDeletePromotion(promo.id)}
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </CardContent>
-              </Card>
-
-              {/* Diálogo para crear/editar promoción */}
-              {/* ... tu diálogo de creación/edición aquí ... */}
-            </div>
-          )}
-
-          {/* Otros tabs ... */}
-
-          {/* Diálogo para mostrar detalles de la promoción */}
-          <Dialog open={!!viewingPromotion} onOpenChange={(open) => { if (!open) setViewingPromotion(null); }}>
-            <DialogContent className="max-w-md">
-              <DialogHeader>
-                <DialogTitle>Detalles de la Promoción</DialogTitle>
-              </DialogHeader>
-              <div className="space-y-2 py-4 text-sm">
-                {viewingPromotion && (
-                  <>
-                    <p><strong>Nombre:</strong> {viewingPromotion.nombre}</p>
-                    <p><strong>Descripción:</strong> {viewingPromotion.descripcion}</p>
-                    <p><strong>Tipo:</strong> {viewingPromotion.tipoPromocion}</p>
-                    <p><strong>Condición:</strong> {viewingPromotion.tipoCondicion}</p>
-                    <p><strong>Descuento:</strong> {viewingPromotion.valorDescuento * 100}%</p>
-                    <p><strong>Inicio:</strong> {new Date(viewingPromotion.fechaInicio).toLocaleString()}</p>
-                    <p><strong>Fin:</strong> {new Date(viewingPromotion.fechaFin).toLocaleString()}</p>
-                    <p><strong>Acumulable:</strong> {viewingPromotion.esAcumulable ? 'Sí' : 'No'}</p>
-                    <p><strong>Estado:</strong> {viewingPromotion.estaActiva ? 'Activa' : 'Pausada'}</p>
-                  </>
-                )}
-              </div>
-              <DialogFooter>
-                <Button onClick={() => setViewingPromotion(null)}>Cerrar</Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-        </main>
-
-        {/* Footer del dashboard */}
-        <Footer />
-      </div>
     </div>
-  </div>
-)};
+  );
+}
