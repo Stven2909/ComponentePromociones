@@ -341,56 +341,76 @@ export function AdminDashboard() {
   };
 
   // Función para crear o actualizar una promoción
-  const handleCreatePromotion = async () => {
-    try {
-      // Validar campos requeridos
-      if (!promotionForm.nombre || !promotionForm.valorDescuento || !promotionForm.fechaInicio || !promotionForm.fechaFin) {
-        throw new Error('Por favor, completa todos los campos requeridos');
-      }
-
-      // Convertir fechas al formato ISO para el backend (LocalDateTime)
-      const fechaInicio = new Date(promotionForm.fechaInicio).toISOString().slice(0, 19).replace('T', ' ');
-      const fechaFin = new Date(promotionForm.fechaFin).toISOString().slice(0, 19).replace('T', ' ');
-
-      const payload = {
-        ...promotionForm,
-        valorDescuento: parseFloat(promotionForm.valorDescuento) || 0,
-        fechaInicio,
-        fechaFin,
-      };
-
-      const url = editingPromotion ? `${API_BASE_URL}/${editingPromotion.id}` : API_BASE_URL;
-      const method = editingPromotion ? 'PUT' : 'POST';
-
-      const response = await fetch(url, {
-        method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-        credentials: 'include',
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.message || `Error ${response.status}: ${editingPromotion ? 'Error al actualizar promoción' : 'Error al crear promoción'}`);
-      }
-
-      toast({
-        title: 'Éxito',
-        description: editingPromotion ? 'Promoción actualizada correctamente' : 'Promoción creada correctamente',
-      });
-
-      setShowCreatePromotion(false);
-      resetPromotionForm();
-      fetchPromociones(); // Recargar la lista
-    } catch (error) {
-      console.error('Error creating/updating promoción:', error);
-      toast({
-        title: 'Error',
-        description: error instanceof Error ? error.message : (editingPromotion ? 'No se pudo actualizar la promoción' : 'No se pudo crear la promoción'),
-        variant: 'destructive',
-      });
+const handleCreatePromotion = async () => {
+  console.log('handleCreatePromotion called with form:', promotionForm);
+  try {
+    if (
+      !promotionForm.nombre.trim() ||
+      promotionForm.valorDescuento === '' ||
+      !promotionForm.fechaInicio ||
+      !promotionForm.fechaFin
+    ) {
+      throw new Error('Por favor, completa todos los campos requeridos');
     }
-  };
+
+    // Convertir fechas al formato ISO para el backend (LocalDateTime)
+    const fechaInicio = new Date(promotionForm.fechaInicio).toISOString().slice(0, 19).replace('T', ' ');
+    const fechaFin = new Date(promotionForm.fechaFin).toISOString().slice(0, 19).replace('T', ' ');
+
+    console.log('Formatted dates:', fechaInicio, fechaFin);
+
+    const payload = {
+      ...promotionForm,
+      valorDescuento: parseFloat(promotionForm.valorDescuento) || 0,
+      fechaInicio,
+      fechaFin,
+    };
+
+    console.log('Payload to send:', payload);
+
+    const url = editingPromotion ? `${API_BASE_URL}/${editingPromotion.id}` : API_BASE_URL;
+    const method = editingPromotion ? 'PUT' : 'POST';
+
+    const response = await fetch(url, {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+      credentials: 'include',
+    });
+
+    console.log('Response status:', response.status);
+    const responseData = await response.json().catch(() => null);
+    console.log('Response data:', responseData);
+
+    if (!response.ok) {
+      throw new Error(
+        responseData?.message ||
+          `Error ${response.status}: ${editingPromotion ? 'Error al actualizar promoción' : 'Error al crear promoción'}`
+      );
+    }
+
+    toast({
+      title: 'Éxito',
+      description: editingPromotion ? 'Promoción actualizada correctamente' : 'Promoción creada correctamente',
+    });
+
+    setShowCreatePromotion(false);
+    resetPromotionForm();
+    fetchPromociones(); // Recargar la lista
+  } catch (error) {
+    console.error('Error creating/updating promoción:', error);
+    toast({
+      title: 'Error',
+      description:
+        error instanceof Error
+          ? error.message
+          : editingPromotion
+          ? 'No se pudo actualizar la promoción'
+          : 'No se pudo crear la promoción',
+      variant: 'destructive',
+    });
+  }
+};
 
   // Función para editar una promoción (abre el diálogo con datos precargados)
   const handleEditPromotion = (promotion: Promocion) => {
