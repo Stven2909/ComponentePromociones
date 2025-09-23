@@ -1,7 +1,10 @@
 package com.componente.promociones.service.impl;
 
+import com.componente.promociones.enums.TipoPromocion;
 import com.componente.promociones.model.dto.PromocionDTO;
+import com.componente.promociones.model.dto.entity.Cupon;
 import com.componente.promociones.model.dto.entity.Promocion;
+import com.componente.promociones.model.dto.integraciones.lealtad.PromocionesDisponiblesResponse;
 import com.componente.promociones.repository.CuponRepository;
 import com.componente.promociones.repository.PromocionRepository;
 import com.componente.promociones.service.PromocionService;
@@ -9,6 +12,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.ws.server.endpoint.annotation.PayloadRoot;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -70,7 +74,8 @@ public class PromocionServiceImpl implements PromocionService {
 
     @Override
     public List<PromocionDTO> listarPromocionesActivas() {
-        List<Promocion> promocionesActivas = promocionRepository.findByEstaActivaTrue();
+        LocalDateTime ahora = LocalDateTime.now();
+        List<Promocion> promocionesActivas = promocionRepository.findPromocionesActivasYVigentes(ahora);
         return promocionesActivas.stream()
                 .map(this::convertirEntityaDTO)
                 .collect(Collectors.toList());
@@ -91,6 +96,34 @@ public class PromocionServiceImpl implements PromocionService {
     public long contarCuponesUtilizados() {
         return cuponRepository.countByUsosActualesGreaterThan(0);
     }
+
+    // 🔗 Para lealtad
+    @Override
+    public PromocionesDisponiblesResponse obtenerPromocionesParaPuntos(Long clienteId, int puntos, String tipoPromocionStr) {
+        // Validación y conversión a Enum
+        TipoPromocion tipoPromocion;
+        try {
+            tipoPromocion = TipoPromocion.valueOf(tipoPromocionStr.toUpperCase());
+        } catch (IllegalArgumentException e) {
+            throw new RuntimeException("Tipo de promoción inválido: " + tipoPromocionStr);
+        }
+
+        // Buscar promociones por tipo y filtrar activas
+        List<Promocion> promociones = promocionRepository.findByTipoPromocion(tipoPromocion);
+
+        List<String> nombresPromociones = promociones.stream()
+                .filter(Promocion::getEstaActiva)
+                .map(Promocion::getNombre)
+                .collect(Collectors.toList());
+
+        // Crear DTO de respuesta
+        PromocionesDisponiblesResponse response = new PromocionesDisponiblesResponse();
+        response.setClienteId(clienteId);
+        response.setPromociones(nombresPromociones);
+        return response;
+    }
+
+
 
     /**
      * Convierte un PromocionDTO a una entidad

@@ -9,6 +9,8 @@ import lombok.NoArgsConstructor;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 @Entity
 @Table(name = "promociones")
@@ -50,4 +52,9 @@ public class Promocion {
 
     @Column(name = "esta_activa", columnDefinition = "BOOLEAN DEFAULT true")
     private Boolean estaActiva = true;
+
+    // 🔗 Relación con Cupones (la promocion debe conocer a sus cupones)
+    @OneToMany(mappedBy = "promocion", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<Cupon> cupones = new ArrayList<>();
+
 }

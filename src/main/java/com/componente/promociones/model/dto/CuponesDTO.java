@@ -39,4 +39,7 @@ public class CuponesDTO {
     @NotNull(message = "La fecha de fin no puede ser nula")
     private LocalDateTime fecha_fin;
 
+    //Relacion con promocion
+    private Long promocionId;
+
 }

@@ -19,9 +19,9 @@ public interface CuponRepository extends JpaRepository<Cupon, Long> {
             "AND c.usosActuales < c.usosMaximos")
     List<Cupon> findCuponesValidosParaUso(@Param("fechaHora") Timestamp fechaHora);
 
-    // ✅ contar cupones con estado ACTIVO
+    //  contar cupones con estado ACTIVO
     long countByEstado(String estado);
 
-    // ✅ contar cupones que ya fueron usados al menos una vez
+    //  contar cupones que ya fueron usados al menos una vez
     long countByUsosActualesGreaterThan(int valor);
 }

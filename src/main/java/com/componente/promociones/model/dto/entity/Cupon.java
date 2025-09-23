@@ -41,4 +41,10 @@ public class Cupon {
 
     @Column(nullable = false, name = "fecha_fin")
     private LocalDateTime fechaFin;
+
+
+    // 🔗 Relación con Promoción
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "promocion_id", nullable = false)
+    private Promocion promocion;
 }

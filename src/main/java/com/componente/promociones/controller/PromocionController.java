@@ -2,13 +2,11 @@ package com.componente.promociones.controller;
 
 import com.componente.promociones.model.dto.DashboardStatsDTO;
 import com.componente.promociones.model.dto.PromocionDTO;
-import com.componente.promociones.model.dto.entity.Promocion;
+import com.componente.promociones.model.dto.integraciones.lealtad.PromocionesDisponiblesResponse;
+import com.componente.promociones.model.dto.integraciones.lealtad.PuntosLealtadRequest;
 import com.componente.promociones.service.CuponService;
 import com.componente.promociones.service.PromocionService;
 import jakarta.validation.Valid;
-import lombok.AllArgsConstructor;
-import lombok.Data;
-import lombok.NoArgsConstructor;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -84,6 +82,17 @@ public class PromocionController {
         return ResponseEntity.ok(stats);
     }
 
-
+    // 🔗 Integracion con Lealtad
+    @PostMapping("/integracion/puntos")
+    public ResponseEntity<PromocionesDisponiblesResponse> recibirPuntosDeLealtad(
+            @RequestBody PuntosLealtadRequest request
+            ) {
+                PromocionesDisponiblesResponse response = promocionService.obtenerPromocionesParaPuntos(
+                        request.getClienteId(),
+                        request.getPuntosDisponibles(),
+                        request.getTipoPromocionAplicable()
+                );
+                return ResponseEntity.ok(response);
+    }
 }
 
