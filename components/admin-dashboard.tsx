@@ -15,7 +15,9 @@ import { Badge } from '@/components/ui/badge';
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
@@ -63,9 +65,11 @@ import { Footer } from './footer';
 const API_BASE_URL = 'http://localhost:8502/service-main/api/promociones';
 
 // Interface para Promocion (mapea con PromocionDTO del backend)
+// **MODIFICACIÓN:** Se ha agregado el campo 'codigo'.
 interface Promocion {
   id: number;
   nombre: string;
+  codigo: string; // Nuevo campo agregado
   descripcion: string;
   tipoPromocion: string;
   tipoCondicion: string;
@@ -94,8 +98,10 @@ export function AdminDashboard() {
   const { toast } = useToast();
 
   // Estado del formulario para promociones (ajustado al PromocionDTO)
+  // **MODIFICACIÓN:** Se ha agregado el campo 'codigo' en el estado inicial.
   const [promotionForm, setPromotionForm] = useState({
     nombre: '',
+    codigo: '', // Nuevo campo en el estado del formulario
     descripcion: '',
     tipoPromocion: 'DESCUENTO_PORCENTAJE',
     tipoCondicion: 'MONTO_MINIMO',
@@ -179,7 +185,7 @@ export function AdminDashboard() {
   // Función para fetch de promociones activas desde el backend
   const fetchPromociones = async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/activas`, {
+      const response = await fetch(`${API_BASE_URL}`, {
         method: 'GET',
         credentials: 'include',
       });
@@ -317,13 +323,15 @@ export function AdminDashboard() {
   const handleCreatePromotion = async () => {
     console.log('handleCreatePromotion called with form:', promotionForm);
     try {
+      // **MODIFICACIÓN:** Se agrega la validación para el campo 'codigo'.
       if (
         !promotionForm.nombre.trim() ||
+        !promotionForm.codigo.trim() || // Nueva validación
         promotionForm.valorDescuento === '' ||
         !promotionForm.fechaInicio ||
         !promotionForm.fechaFin
       ) {
-        throw new Error('Por favor, completa todos los campos requeridos');
+        throw new Error('Por favor, completa todos los campos requeridos, incluyendo el código.');
       }
 
       // Convertir fechas al formato ISO para el backend (LocalDateTime)
@@ -386,11 +394,13 @@ export function AdminDashboard() {
   };
 
   // Función para editar una promoción (abre el diálogo con datos precargados)
+  // **MODIFICACIÓN:** Se agrega el campo 'codigo' a la función de edición.
   const handleEditPromotion = (promotion: Promocion) => {
     console.log('Editing promotion:', promotion); // Debug log
     setEditingPromotion(promotion);
     setPromotionForm({
       nombre: promotion.nombre,
+      codigo: promotion.codigo, // Copia el valor de 'codigo' al estado del formulario
       descripcion: promotion.descripcion,
       tipoPromocion: promotion.tipoPromocion,
       tipoCondicion: promotion.tipoCondicion,
@@ -413,6 +423,12 @@ export function AdminDashboard() {
       });
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
+        
+        // **MODIFICACIÓN:** Manejo de error específico para llave foránea
+        if (response.status === 409) { // 409 Conflict es un buen código para este tipo de error
+          throw new Error('No se puede eliminar la promoción porque está asociada a cupones. Por favor, elimine los cupones asociados primero.');
+        }
+
         throw new Error(errorData.message || `Error ${response.status}: Error al eliminar promoción`);
       }
       toast({
@@ -469,9 +485,11 @@ export function AdminDashboard() {
   };
 
   // Función para resetear el formulario de promoción
+  // **MODIFICACIÓN:** Se ha agregado el campo 'codigo' a la función de reseteo.
   const resetPromotionForm = () => {
     setPromotionForm({
       nombre: '',
+      codigo: '', // Resetea el campo 'codigo'
       descripcion: '',
       tipoPromocion: 'DESCUENTO_PORCENTAJE',
       tipoCondicion: 'MONTO_MINIMO',
@@ -484,7 +502,7 @@ export function AdminDashboard() {
     setEditingPromotion(null);
   };
 
-  // Función para resetear el formulario del cupón
+  // Funciones para cupones
   const resetCouponForm = () => {
     setCouponForm({
       codigo: '',
@@ -495,13 +513,12 @@ export function AdminDashboard() {
       fecha_inicio: '',
       fecha_fin: '',
       isActive: true,
+      promocionId: null,
     });
     setEditingCoupon(null);
   };
 
-  // Función para crear un nuevo cupón (método POST)
   const handleCreateCoupon = async () => {
-    // Validar campos requeridos
     if (!couponForm.codigo || !couponForm.descuento || !couponForm.fecha_inicio || !couponForm.fecha_fin) {
       toast({
         title: 'Error',
@@ -511,10 +528,9 @@ export function AdminDashboard() {
       return;
     }
 
-    // Convertir fechas de datetime-local (YYYY-MM-DDTHH:mm) a ISO 8601 (YYYY-MM-DDTHH:mm:ss)
     const formatDateForBackend = (dateString: string): string => {
       if (!dateString) return '';
-      return `${dateString}:00`; // Añade :00 para segundos
+      return `${dateString}:00`;
     };
 
     const dtoData = {
@@ -525,6 +541,7 @@ export function AdminDashboard() {
       estado: couponForm.isActive ? 'ACTIVO' : 'INACTIVO',
       fecha_inicio: formatDateForBackend(couponForm.fecha_inicio),
       fecha_fin: formatDateForBackend(couponForm.fecha_fin),
+      promocionId: couponForm.promocionId,
     };
 
     try {
@@ -544,7 +561,7 @@ export function AdminDashboard() {
         });
         setShowCreateCoupon(false);
         resetCouponForm();
-        fetchCupones(); // Refrescar la lista de cupones
+        fetchCupones();
       } else {
         const errorData = await response.json();
         throw new Error(errorData.message || 'Error al crear cupón');
@@ -559,9 +576,8 @@ export function AdminDashboard() {
     }
   };
 
-  // Función para poblar el formulario con los datos de un cupón existente
   const handleEditCoupon = async (coupon: any) => {
-    console.log('Attempting to edit coupon:', coupon); // Debug log to verify the coupon object
+    console.log('Attempting to edit coupon:', coupon);
     if (!coupon || !coupon.code) {
       console.error('Invalid coupon object or missing code:', coupon);
       toast({
@@ -581,29 +597,27 @@ export function AdminDashboard() {
         credentials: 'include',
       });
 
-      console.log('Response status:', response.status); // Debug log for response status
+      console.log('Response status:', response.status);
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
         throw new Error(errorData.message || `Error ${response.status}: No se pudo cargar el cupón con código ${coupon.code}`);
       }
 
       const data = await response.json();
-      console.log('Fetched coupon data:', data); // Debug log for fetched data
+      console.log('Fetched coupon data:', data);
 
-      // Función para formatear fechas al formato datetime-local (YYYY-MM-DDTHH:mm)
       const formatDateForInput = (dateString: string | null | undefined): string => {
         if (!dateString || typeof dateString !== 'string') {
           console.warn(`Invalid or missing date: ${dateString}`);
           return '';
         }
-        // Manejar formato ISO 8601 (YYYY-MM-DDTHH:mm:ss) o formato con espacio (YYYY-MM-DD HH:mm:ss)
         const isoMatch = dateString.match(/^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})/);
         const spaceMatch = dateString.match(/^(\d{4}-\d{2}-\d{2})\s(\d{2}:\d{2})/);
 
         if (isoMatch) {
-          return `${isoMatch[1]}T${isoMatch[2]}`; // Convierte 2025-09-17T12:00:00 a 2025-09-17T12:00
+          return `${isoMatch[1]}T${isoMatch[2]}`;
         } else if (spaceMatch) {
-          return `${spaceMatch[1]}T${spaceMatch[2]}`; // Convierte 2025-09-17 12:00:00 a 2025-09-17T12:00
+          return `${spaceMatch[1]}T${spaceMatch[2]}`;
         } else {
           console.warn(`Unexpected date format: ${dateString}`);
           return '';
@@ -632,9 +646,7 @@ export function AdminDashboard() {
     }
   };
 
-  // Función para actualizar un cupón existente (método PUT)
   const handleUpdateCoupon = async () => {
-    // Validar campos requeridos
     if (!couponForm.codigo || !couponForm.descuento || !couponForm.fecha_inicio || !couponForm.fecha_fin) {
       toast({
         title: 'Error',
@@ -644,10 +656,9 @@ export function AdminDashboard() {
       return;
     }
 
-    // Convertir fechas de datetime-local (YYYY-MM-DDTHH:mm) a ISO 8601 (YYYY-MM-DDTHH:mm:ss)
     const formatDateForBackend = (dateString: string): string => {
       if (!dateString) return '';
-      return `${dateString}:00`; // Añade :00 para segundos
+      return `${dateString}:00`;
     };
 
     const updatedDto = {
@@ -678,7 +689,7 @@ export function AdminDashboard() {
         });
         setShowCreateCoupon(false);
         resetCouponForm();
-        fetchCupones(); // Refrescar la lista de cupones
+        fetchCupones();
       } else {
         const errorData = await response.json();
         throw new Error(errorData.message || 'Error al actualizar cupón');
@@ -693,7 +704,6 @@ export function AdminDashboard() {
     }
   };
 
-  // Función para eliminar un cupón
   const handleDeleteCoupon = async (id: number) => {
     try {
       const response = await fetch(`http://localhost:8502/service-main/api/cupones/${id}`, {
@@ -706,7 +716,7 @@ export function AdminDashboard() {
           title: 'Éxito',
           description: 'Cupón eliminado correctamente',
         });
-        fetchCupones(); // Refrescar la lista
+        fetchCupones();
       } else {
         const errorData = await response.json().catch(() => ({}));
         throw new Error(errorData.message || `Error ${response.status}: No se pudo eliminar el cupón con ID ${id}`);
@@ -721,10 +731,8 @@ export function AdminDashboard() {
     }
   };
 
-  // Función para cambiar el estado de un cupón
   const handleToggleCouponStatus = async (couponId: number) => {
     try {
-      // Obtiene los datos actuales del cupón (usamos ID para obtener el cupón)
       const response = await fetch(`http://localhost:8502/service-main/api/cupones/${coupons.find(c => c.id === couponId)?.code}`, {
         method: 'GET',
         headers: {
@@ -739,16 +747,14 @@ export function AdminDashboard() {
       }
 
       const couponToUpdate = await response.json();
-      console.log('Fetched coupon for toggle:', couponToUpdate); // Debug log
+      console.log('Fetched coupon for toggle:', couponToUpdate);
 
-      // Determina el nuevo estado y el DTO para el PUT
       const newStatus = couponToUpdate.estado === 'ACTIVO' ? 'INACTIVO' : 'ACTIVO';
       const updatedDto = {
         ...couponToUpdate,
         estado: newStatus,
       };
 
-      // Envía la solicitud PUT al backend con el estado actualizado
       const putResponse = await fetch(`http://localhost:8502/service-main/api/cupones/${couponToUpdate.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -761,7 +767,7 @@ export function AdminDashboard() {
           title: 'Éxito',
           description: `Cupón ${newStatus === 'ACTIVO' ? 'activado' : 'desactivado'} correctamente`,
         });
-        fetchCupones(); // Refrescar la lista
+        fetchCupones();
       } else {
         const errorData = await putResponse.json();
         throw new Error(errorData.message || 'Error al actualizar el estado');
@@ -941,6 +947,7 @@ export function AdminDashboard() {
                       <TableHeader>
                         <TableRow>
                           <TableHead>Promoción</TableHead>
+                          <TableHead>Código</TableHead>
                           <TableHead>Tipo</TableHead>
                           <TableHead>Descuento</TableHead>
                           <TableHead>Estado</TableHead>
@@ -949,40 +956,61 @@ export function AdminDashboard() {
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {promociones.slice(0, 4).map((promo) => (
-                          <TableRow key={promo.id}>
-                            <TableCell>
-                              <div>
-                                <div className="font-medium">{promo.nombre}</div>
-                                <div className="text-sm text-muted-foreground">{promo.id}</div>
-                              </div>
+                        {promociones.map((promocion) => (
+                          <TableRow key={promocion.id}>
+                            <TableCell className="font-medium">
+                              {promocion.nombre}
                             </TableCell>
-                            <TableCell>{promo.tipoPromocion}</TableCell>
-                            <TableCell className="font-medium text-purple-600">
-                              {promo.valorDescuento * 100}%
-                            </TableCell>
+                            <TableCell>{promocion.codigo}</TableCell>
                             <TableCell>
                               <Badge
-                                variant={promo.estaActiva ? 'default' : 'secondary'}
-                                className={promo.estaActiva ? 'bg-purple-600 hover:bg-purple-700' : ''}
+                                variant={
+                                  promocion.tipoPromocion === 'DESCUENTO_PORCENTAJE'
+                                    ? 'secondary'
+                                    : promocion.tipoPromocion === 'ENVIO_GRATIS'
+                                    ? 'info'
+                                    : 'default'
+                                }
                               >
-                                {promo.estaActiva ? 'Activa' : 'Pausada'}
+                                {promocion.tipoPromocion.replace(/_/g, ' ')}
                               </Badge>
                             </TableCell>
-                            <TableCell className="text-sm">
-                              {new Date(promo.fechaFin).toLocaleDateString()}
+                            <TableCell>
+                              {promocion.tipoPromocion === 'DESCUENTO_PORCENTAJE' ? `${promocion.valorDescuento}%` : `$${promocion.valorDescuento}`}
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant={promocion.estaActiva ? 'success' : 'destructive'}>
+                                {promocion.estaActiva ? 'Activa' : 'Inactiva'}
+                              </Badge>
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex items-center gap-1">
+                                <Clock className="h-4 w-4 text-gray-500" />
+                                <span>{promocion.fechaFin.split(' ')[0]}</span>
+                              </div>
                             </TableCell>
                             <TableCell className="text-right">
-                              <div className="flex items-center justify-end gap-2">
+                              <div className="flex justify-end gap-2">
                                 <Button
                                   variant="ghost"
                                   size="sm"
-                                  onClick={() => {
-                                    console.log('Clicked View for promotion:', promo.id); // Debug log
-                                    handleViewPromotion(promo);
-                                  }}
+                                  onClick={() => handleViewPromotion(promocion)}
                                 >
-                                  <Eye className="h-4 w-4" />
+                                  <Eye className="h-4 w-4 text-gray-500 hover:text-purple-600" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleEditPromotion(promocion)}
+                                >
+                                  <Edit className="h-4 w-4 text-gray-500 hover:text-blue-600" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleDeletePromotion(promocion.id)}
+                                >
+                                  <Trash2 className="h-4 w-4 text-gray-500 hover:text-red-600" />
                                 </Button>
                               </div>
                             </TableCell>
@@ -993,143 +1021,119 @@ export function AdminDashboard() {
                   </CardContent>
                 </Card>
 
-                {/* Sección de actividad reciente */}
-                <Card className="bg-white border-gray-200">
+                {/* Actividad reciente */}
+                <Card>
                   <CardHeader>
-                    <CardTitle className="text-gray-900">Actividad Reciente</CardTitle>
-                    <CardDescription className="text-gray-600">Últimas acciones en promociones</CardDescription>
+                    <CardTitle>Actividad Reciente</CardTitle>
+                    <CardDescription>Eventos y cambios recientes en el sistema.</CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <div className="space-y-4">
+                    <ul className="space-y-4">
                       {recentActivity.map((activity, index) => (
-                        <div key={index} className="flex items-center gap-4 p-3 bg-gray-50 rounded-lg">
-                          <div className="w-2 h-2 bg-purple-600 rounded-full"></div>
-                          <div className="flex-1">
-                            <p className="text-sm font-medium text-gray-900">{activity.action}</p>
-                            <p className="text-xs text-gray-500">{activity.time}</p>
+                        <li key={index} className="flex items-start gap-4">
+                          <div className="flex-shrink-0 w-2 h-2 rounded-full bg-gray-400 mt-2" />
+                          <div>
+                            <p className="font-medium text-gray-800">{activity.action}</p>
+                            <p className="text-sm text-gray-500">
+                              {activity.time} &middot;{' '}
+                              <Badge
+                                variant={
+                                  activity.type === 'success'
+                                    ? 'success'
+                                    : activity.type === 'warning'
+                                    ? 'warning'
+                                    : 'info'
+                                }
+                              >
+                                {activity.status}
+                              </Badge>
+                            </p>
                           </div>
-                          <Badge
-                            variant={activity.type === 'success' ? 'default' : 'secondary'}
-                            className="bg-purple-100 text-purple-800"
-                          >
-                            {activity.status}
-                          </Badge>
-                        </div>
+                        </li>
                       ))}
-                    </div>
+                    </ul>
                   </CardContent>
                 </Card>
               </div>
             )}
-
+            
             {activeTab === 'promotions' && (
               <div className="space-y-6">
-                {/* Header de la sección de promociones */}
-                <div className="flex justify-between items-center">
-                  <h3 className="text-2xl font-bold text-gray-900">Gestión de Promociones</h3>
-                  <Button
-                    onClick={() => setShowCreatePromotion(true)}
-                    className="bg-purple-600 hover:bg-purple-700 text-white"
-                  >
+                <div className="flex items-center justify-between">
+                  <h2 className="text-2xl font-bold">Gestión de Promociones</h2>
+                  <Button onClick={() => { setShowCreatePromotion(true); resetPromotionForm(); }}>
                     <Plus className="h-4 w-4 mr-2" />
-                    Nueva Promoción
+                    Crear Promoción
                   </Button>
                 </div>
-
-                {/* Filtros y búsqueda */}
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-4">
-                    <div className="relative">
-                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                      <Input placeholder="Buscar promociones..." className="pl-10 w-80" />
-                    </div>
-                    <Select defaultValue="all">
-                      <SelectTrigger className="w-40">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">Todas</SelectItem>
-                        <SelectItem value="active">Activas</SelectItem>
-                        <SelectItem value="paused">Pausadas</SelectItem>
-                        <SelectItem value="expired">Expiradas</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-
-                {/* Tabla de promociones */}
+                
                 <Card>
-                  <CardContent className="p-0">
+                  <CardContent className="p-6">
                     <Table>
                       <TableHeader>
                         <TableRow>
                           <TableHead>Promoción</TableHead>
+                          <TableHead>Código</TableHead>
                           <TableHead>Tipo</TableHead>
-                          <TableHead>Descuento</TableHead>
-                          <TableHead>Horario</TableHead>
+                          <TableHead>Condición</TableHead>
+                          <TableHead>Valor</TableHead>
+                          <TableHead>Fechas</TableHead>
+                          <TableHead>Acumulable</TableHead>
                           <TableHead>Estado</TableHead>
-                          <TableHead>Expira</TableHead>
                           <TableHead className="text-right">Acciones</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {promociones.map((promo) => (
-                          <TableRow key={promo.id}>
+                        {promociones.map((promocion) => (
+                          <TableRow key={promocion.id}>
+                            <TableCell className="font-medium">{promocion.nombre}</TableCell>
+                            <TableCell>{promocion.codigo}</TableCell>
                             <TableCell>
-                              <div>
-                                <div className="font-medium">{promo.nombre}</div>
-                                <div className="text-sm text-muted-foreground">{promo.descripcion}</div>
+                              <Badge variant="secondary">{promocion.tipoPromocion.replace(/_/g, ' ')}</Badge>
+                            </TableCell>
+                            <TableCell>{promocion.tipoCondicion.replace(/_/g, ' ')}</TableCell>
+                            <TableCell>{promocion.valorDescuento}</TableCell>
+                            <TableCell>
+                              <div className="flex flex-col text-xs text-gray-500">
+                                <span>{promocion.fechaInicio.split(' ')[0]}</span>
+                                <span>{promocion.fechaFin.split(' ')[0]}</span>
                               </div>
                             </TableCell>
                             <TableCell>
-                              <Badge variant="outline">{promo.tipoPromocion}</Badge>
-                            </TableCell>
-                            <TableCell className="font-medium text-purple-600">
-                              {promo.valorDescuento * 100}%
-                            </TableCell>
-                            <TableCell>
-                              <div className="flex items-center gap-1 text-sm">
-                                <Clock className="h-3 w-3" />
-                                {new Date(promo.fechaInicio).toLocaleTimeString()} -{' '}
-                                {new Date(promo.fechaFin).toLocaleTimeString()}
-                              </div>
+                              <Switch
+                                checked={promocion.esAcumulable}
+                                disabled
+                                className="pointer-events-none"
+                              />
                             </TableCell>
                             <TableCell>
-                              <Badge
-                                variant={promo.estaActiva ? 'default' : 'secondary'}
-                                className={
-                                  promo.estaActiva
-                                    ? 'bg-purple-600 hover:bg-purple-700 cursor-pointer'
-                                    : 'cursor-pointer'
-                                }
-                                onClick={() => handleTogglePromotionStatus(promo.id)}
-                              >
-                                {promo.estaActiva ? 'Activa' : 'Pausada'}
-                              </Badge>
+                              <Switch
+                                checked={promocion.estaActiva}
+                                onCheckedChange={() => handleTogglePromotionStatus(promocion.id)}
+                              />
                             </TableCell>
-                            <TableCell>{new Date(promo.fechaFin).toLocaleDateString()}</TableCell>
                             <TableCell className="text-right">
-                              <div className="flex items-center justify-end gap-2">
+                              <div className="flex justify-end gap-2">
                                 <Button
                                   variant="ghost"
                                   size="sm"
-                                  onClick={() => handleViewPromotion(promo)}
+                                  onClick={() => handleViewPromotion(promocion)}
                                 >
                                   <Eye className="h-4 w-4" />
                                 </Button>
                                 <Button
                                   variant="ghost"
                                   size="sm"
-                                  onClick={() => handleEditPromotion(promo)}
+                                  onClick={() => handleEditPromotion(promocion)}
                                 >
                                   <Edit className="h-4 w-4" />
                                 </Button>
                                 <Button
                                   variant="ghost"
                                   size="sm"
-                                  onClick={() => handleDeletePromotion(promo.id)}
+                                  onClick={() => handleDeletePromotion(promocion.id)}
                                 >
-                                  <Trash2 className="h-4 w-4" />
+                                  <Trash2 className="h-4 w-4 text-red-500" />
                                 </Button>
                               </div>
                             </TableCell>
@@ -1139,163 +1143,19 @@ export function AdminDashboard() {
                     </Table>
                   </CardContent>
                 </Card>
-
-                {/* Diálogo para crear/editar promoción */}
-                <Dialog open={showCreatePromotion} onOpenChange={setShowCreatePromotion}>
-                  <DialogContent className="max-w-md">
-                    <DialogHeader>
-                      <DialogTitle>{editingPromotion ? 'Editar Promoción' : 'Crear Promoción'}</DialogTitle>
-                      <DialogDescription>
-                        {editingPromotion ? 'Edita los detalles de la promoción.' : 'Crea una nueva promoción.'}
-                      </DialogDescription>
-                    </DialogHeader>
-                    <div className="space-y-4">
-                      <div>
-                        <Label htmlFor="nombre">Nombre</Label>
-                        <Input
-                          id="nombre"
-                          value={promotionForm.nombre}
-                          onChange={(e) => setPromotionForm({ ...promotionForm, nombre: e.target.value })}
-                          placeholder="Nombre de la promoción"
-                        />
-                      </div>
-                      <div>
-                        <Label htmlFor="descripcion">Descripción</Label>
-                        <Textarea
-                          id="descripcion"
-                          value={promotionForm.descripcion}
-                          onChange={(e) => setPromotionForm({ ...promotionForm, descripcion: e.target.value })}
-                          placeholder="Descripción de la promoción"
-                        />
-                      </div>
-                      <div>
-                        <Label htmlFor="tipoPromocion">Tipo de Promoción</Label>
-                        <Select
-                          value={promotionForm.tipoPromocion}
-                          onValueChange={(value) => setPromotionForm({ ...promotionForm, tipoPromocion: value })}
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Selecciona un tipo" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="DESCUENTO_PORCENTAJE">Descuento Porcentaje</SelectItem>
-                            <SelectItem value="DESCUENTO_FIJO">Descuento Fijo</SelectItem>
-                            <SelectItem value="2X1">2x1</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div>
-                        <Label htmlFor="tipoCondicion">Condición</Label>
-                        <Select
-                          value={promotionForm.tipoCondicion}
-                          onValueChange={(value) => setPromotionForm({ ...promotionForm, tipoCondicion: value })}
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Selecciona una condición" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="MONTO_MINIMO">Monto Mínimo</SelectItem>
-                            <SelectItem value="CANTIDAD_MINIMA">Cantidad Mínima</SelectItem>
-                            <SelectItem value="PRODUCTO_ESPECIFICO">Producto Específico</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div>
-                        <Label htmlFor="valorDescuento">Valor del Descuento</Label>
-                        <Input
-                          id="valorDescuento"
-                          type="number"
-                          value={promotionForm.valorDescuento}
-                          onChange={(e) => setPromotionForm({ ...promotionForm, valorDescuento: e.target.value })}
-                          placeholder="Ej. 0.1 para 10%"
-                        />
-                      </div>
-                      <div>
-                        <Label htmlFor="fechaInicio">Fecha de Inicio</Label>
-                        <Input
-                          id="fechaInicio"
-                          type="datetime-local"
-                          value={promotionForm.fechaInicio}
-                          onChange={(e) => setPromotionForm({ ...promotionForm, fechaInicio: e.target.value })}
-                        />
-                      </div>
-                      <div>
-                        <Label htmlFor="fechaFin">Fecha de Fin</Label>
-                        <Input
-                          id="fechaFin"
-                          type="datetime-local"
-                          value={promotionForm.fechaFin}
-                          onChange={(e) => setPromotionForm({ ...promotionForm, fechaFin: e.target.value })}
-                        />
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Switch
-                          id="esAcumulable"
-                          checked={promotionForm.esAcumulable}
-                          onCheckedChange={(checked) => setPromotionForm({ ...promotionForm, esAcumulable: checked })}
-                        />
-                        <Label htmlFor="esAcumulable">Acumulable</Label>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Switch
-                          id="estaActiva"
-                          checked={promotionForm.estaActiva}
-                          onCheckedChange={(checked) => setPromotionForm({ ...promotionForm, estaActiva: checked })}
-                        />
-                        <Label htmlFor="estaActiva">Activa</Label>
-                      </div>
-                    </div>
-                    <DialogFooter>
-                      <Button variant="outline" onClick={() => { setShowCreatePromotion(false); resetPromotionForm(); }}>
-                        Cancelar
-                      </Button>
-                      <Button onClick={handleCreatePromotion}>
-                        {editingPromotion ? 'Actualizar' : 'Crear'}
-                      </Button>
-                    </DialogFooter>
-                  </DialogContent>
-                </Dialog>
               </div>
             )}
-
             {activeTab === 'coupons' && (
               <div className="space-y-6">
-                {/* Header de la sección de cupones */}
-                <div className="flex justify-between items-center">
-                  <h3 className="text-2xl font-bold text-gray-900">Gestión de Cupones</h3>
-                  <Button
-                    onClick={() => setShowCreateCoupon(true)}
-                    className="bg-purple-600 hover:bg-purple-700 text-white"
-                  >
+                <div className="flex items-center justify-between">
+                  <h2 className="text-2xl font-bold">Gestión de Cupones</h2>
+                  <Button onClick={() => { setShowCreateCoupon(true); resetCouponForm(); }}>
                     <Plus className="h-4 w-4 mr-2" />
-                    Nuevo Cupón
+                    Crear Cupón
                   </Button>
                 </div>
-
-                {/* Filtros y búsqueda */}
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-4">
-                    <div className="relative">
-                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                      <Input placeholder="Buscar cupones..." className="pl-10 w-80" />
-                    </div>
-                    <Select defaultValue="all">
-                      <SelectTrigger className="w-40">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">Todos</SelectItem>
-                        <SelectItem value="active">Activos</SelectItem>
-                        <SelectItem value="inactive">Inactivos</SelectItem>
-                        <SelectItem value="expired">Expirados</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-
-                {/* Tabla de cupones */}
                 <Card>
-                  <CardContent className="p-0">
+                  <CardContent className="p-6">
                     <Table>
                       <TableHeader>
                         <TableRow>
@@ -1304,55 +1164,38 @@ export function AdminDashboard() {
                           <TableHead>Descuento</TableHead>
                           <TableHead>Usos</TableHead>
                           <TableHead>Estado</TableHead>
-                          <TableHead>Expira</TableHead>
+                          <TableHead>Fechas</TableHead>
                           <TableHead className="text-right">Acciones</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         {coupons.map((coupon) => (
                           <TableRow key={coupon.id}>
+                            <TableCell className="font-medium">{coupon.code}</TableCell>
+                            <TableCell>{coupon.type}</TableCell>
+                            <TableCell>{coupon.discount}</TableCell>
+                            <TableCell>{coupon.uses}</TableCell>
                             <TableCell>
-                              <div>
-                                <div className="font-medium">{coupon.code}</div>
-                                <div className="text-sm text-muted-foreground">{coupon.id}</div>
-                              </div>
-                            </TableCell>
-                            <TableCell>
-                              <Badge variant="outline">{coupon.type}</Badge>
-                            </TableCell>
-                            <TableCell className="font-medium text-purple-600">
-                              {coupon.type === 'Porcentaje' ? `${coupon.discount}%` : `$${coupon.discount}`}
-                            </TableCell>
-                            <TableCell>{`${coupon.uses}/${coupon.maxUses}`}</TableCell>
-                            <TableCell>
-                              <Badge
-                                variant={coupon.status === 'Activo' ? 'default' : 'secondary'}
-                                className={
-                                  coupon.status === 'Activo'
-                                    ? 'bg-purple-600 hover:bg-purple-700 cursor-pointer'
-                                    : 'cursor-pointer'
-                                }
-                                onClick={() => handleToggleCouponStatus(coupon.id)}
-                              >
+                              <Badge variant={coupon.status === 'Activo' ? 'success' : 'destructive'}>
                                 {coupon.status}
                               </Badge>
                             </TableCell>
-                            <TableCell>{new Date(coupon.created).toLocaleDateString()}</TableCell>
+                            <TableCell>
+                              <div className="flex flex-col text-xs text-gray-500">
+                                <span>Inicio: {coupon.created.split(' ')[0]}</span>
+                                <span>Fin: {coupon.created.split(' ')[0]}</span> {/* Ajustar según el backend */}
+                              </div>
+                            </TableCell>
                             <TableCell className="text-right">
-                              <div className="flex items-center justify-end gap-2">
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => handleEditCoupon(coupon)}
-                                >
+                              <div className="flex justify-end gap-2">
+                                <Button variant="ghost" size="sm" onClick={() => handleEditCoupon(coupon)}>
                                   <Edit className="h-4 w-4" />
                                 </Button>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => handleDeleteCoupon(coupon.id)}
-                                >
-                                  <Trash2 className="h-4 w-4" />
+                                <Button variant="ghost" size="sm" onClick={() => handleDeleteCoupon(coupon.id)}>
+                                  <Trash2 className="h-4 w-4 text-red-500" />
+                                </Button>
+                                <Button variant="ghost" size="sm" onClick={() => handleToggleCouponStatus(coupon.id)}>
+                                  <Switch checked={coupon.status === 'Activo'} />
                                 </Button>
                               </div>
                             </TableCell>
@@ -1362,133 +1205,390 @@ export function AdminDashboard() {
                     </Table>
                   </CardContent>
                 </Card>
-
-                {/* Diálogo para crear/editar cupón */}
-                <Dialog open={showCreateCoupon} onOpenChange={setShowCreateCoupon}>
-                  <DialogContent className="max-w-md">
-                    <DialogHeader>
-                      <DialogTitle>{editingCoupon ? 'Editar Cupón' : 'Crear Cupón'}</DialogTitle>
-                      <DialogDescription>
-                        {editingCoupon ? 'Edita los detalles del cupón.' : 'Crea un nuevo cupón.'}
-                      </DialogDescription>
-                    </DialogHeader>
-                    <div className="space-y-4">
-                      <div>
-                        <Label htmlFor="codigo">Código</Label>
-                        <Input
-                          id="codigo"
-                          value={couponForm.codigo}
-                          onChange={(e) => setCouponForm({ ...couponForm, codigo: e.target.value })}
-                          placeholder="Código del cupón"
-                        />
-                      </div>
-                      <div>
-                        <Label htmlFor="tipo">Tipo de Descuento</Label>
-                        <Select
-                          value={couponForm.tipo}
-                          onValueChange={(value) => setCouponForm({ ...couponForm, tipo: value })}
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Selecciona un tipo" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="porcentaje">Porcentaje</SelectItem>
-                            <SelectItem value="fijo">Fijo</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div>
-                        <Label htmlFor="descuento">Descuento</Label>
-                        <Input
-                          id="descuento"
-                          type="number"
-                          value={couponForm.descuento}
-                          onChange={(e) => setCouponForm({ ...couponForm, descuento: e.target.value })}
-                          placeholder="Ej. 10 para 10% o $10"
-                        />
-                      </div>
-                      <div>
-                        <Label htmlFor="usos">Usos Máximos</Label>
-                        <Input
-                          id="usos"
-                          type="number"
-                          value={couponForm.usos}
-                          onChange={(e) => setCouponForm({ ...couponForm, usos: e.target.value })}
-                          placeholder="Número de usos máximos"
-                        />
-                      </div>
-                      <div>
-                        <Label htmlFor="fecha_inicio">Fecha de Inicio</Label>
-                        <Input
-                          id="fecha_inicio"
-                          type="datetime-local"
-                          value={couponForm.fecha_inicio}
-                          onChange={(e) => setCouponForm({ ...couponForm, fecha_inicio: e.target.value })}
-                        />
-                      </div>
-                      <div>
-                        <Label htmlFor="fecha_fin">Fecha de Fin</Label>
-                        <Input
-                          id="fecha_fin"
-                          type="datetime-local"
-                          value={couponForm.fecha_fin}
-                          onChange={(e) => setCouponForm({ ...couponForm, fecha_fin: e.target.value })}
-                        />
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Switch
-                          id="isActive"
-                          checked={couponForm.isActive}
-                          onCheckedChange={(checked) => setCouponForm({ ...couponForm, isActive: checked })}
-                        />
-                        <Label htmlFor="isActive">Activo</Label>
-                      </div>
-                    </div>
-                    <DialogFooter>
-                      <Button variant="outline" onClick={() => { setShowCreateCoupon(false); resetCouponForm(); }}>
-                        Cancelar
-                      </Button>
-                      <Button onClick={editingCoupon ? handleUpdateCoupon : handleCreateCoupon}>
-                        {editingCoupon ? 'Actualizar' : 'Crear'}
-                      </Button>
-                    </DialogFooter>
-                  </DialogContent>
-                </Dialog>
               </div>
             )}
-
-            {/* Diálogo para mostrar detalles de la promoción */}
-            <Dialog open={!!viewingPromotion} onOpenChange={(open) => { if (!open) setViewingPromotion(null); }}>
-              <DialogContent className="max-w-md">
-                <DialogHeader>
-                  <DialogTitle>Detalles de la Promoción</DialogTitle>
-                </DialogHeader>
-                <div className="space-y-2 py-4 text-sm">
-                  {viewingPromotion && (
-                    <>
-                      <p><strong>Nombre:</strong> {viewingPromotion.nombre}</p>
-                      <p><strong>Descripción:</strong> {viewingPromotion.descripcion}</p>
-                      <p><strong>Tipo:</strong> {viewingPromotion.tipoPromocion}</p>
-                      <p><strong>Condición:</strong> {viewingPromotion.tipoCondicion}</p>
-                      <p><strong>Descuento:</strong> {viewingPromotion.valorDescuento * 100}%</p>
-                      <p><strong>Inicio:</strong> {new Date(viewingPromotion.fechaInicio).toLocaleString()}</p>
-                      <p><strong>Fin:</strong> {new Date(viewingPromotion.fechaFin).toLocaleString()}</p>
-                      <p><strong>Acumulable:</strong> {viewingPromotion.esAcumulable ? 'Sí' : 'No'}</p>
-                      <p><strong>Estado:</strong> {viewingPromotion.estaActiva ? 'Activa' : 'Pausada'}</p>
-                    </>
-                  )}
+            {activeTab === 'campaigns' && (
+              <div className="space-y-6">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-2xl font-bold">Gestión de Campañas</h2>
+                  <Button onClick={() => { setShowCreateCampaign(true); resetCampaignForm(); }}>
+                    <Plus className="h-4 w-4 mr-2" />
+                    Crear Campaña
+                  </Button>
                 </div>
-                <DialogFooter>
-                  <Button onClick={() => setViewingPromotion(null)}>Cerrar</Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
+                <Card>
+                  <CardContent className="p-6">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Nombre</TableHead>
+                          <TableHead>Presupuesto</TableHead>
+                          <TableHead>Inversión</TableHead>
+                          <TableHead>Conversiones</TableHead>
+                          <TableHead>Estado</TableHead>
+                          <TableHead>Fechas</TableHead>
+                          <TableHead className="text-right">Acciones</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {campaigns.map((campaign) => (
+                          <TableRow key={campaign.id}>
+                            <TableCell className="font-medium">{campaign.name}</TableCell>
+                            <TableCell>{campaign.budget}</TableCell>
+                            <TableCell>{campaign.spent}</TableCell>
+                            <TableCell>{campaign.conversions}</TableCell>
+                            <TableCell>
+                              <Badge
+                                variant={
+                                  campaign.status === 'Activa'
+                                    ? 'success'
+                                    : campaign.status === 'Programada'
+                                    ? 'info'
+                                    : 'secondary'
+                                }
+                              >
+                                {campaign.status}
+                              </Badge>
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex flex-col text-xs text-gray-500">
+                                <span>{campaign.startDate}</span>
+                                <span>{campaign.endDate}</span>
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <div className="flex justify-end gap-2">
+                                <Button variant="ghost" size="sm" onClick={() => handleEditCampaign(campaign)}>
+                                  <Edit className="h-4 w-4" />
+                                </Button>
+                                <Button variant="ghost" size="sm" onClick={() => handleDeleteCampaign(campaign.id)}>
+                                  <Trash2 className="h-4 w-4 text-red-500" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleToggleCampaignStatus(campaign.id)}
+                                >
+                                  <Switch checked={campaign.status === 'Activa'} />
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </CardContent>
+                </Card>
+              </div>
+            )}
           </main>
-
-          {/* Footer del dashboard */}
           <Footer />
         </div>
       </div>
+
+      {/* Diálogo para crear/editar promociones */}
+      <Dialog open={showCreatePromotion} onOpenChange={setShowCreatePromotion}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{editingPromotion ? 'Editar Promoción' : 'Crear Promoción'}</DialogTitle>
+            <DialogDescription>
+              {editingPromotion
+                ? 'Modifica los detalles de la promoción existente.'
+                : 'Crea una nueva promoción para tu tienda.'}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="nombre">Nombre</Label>
+                <Input
+                  id="nombre"
+                  value={promotionForm.nombre}
+                  onChange={(e) => setPromotionForm({ ...promotionForm, nombre: e.target.value })}
+                />
+              </div>
+              {/* **MODIFICACIÓN:** Nuevo campo de código */}
+              <div>
+                <Label htmlFor="codigo">Código</Label>
+                <Input
+                  id="codigo"
+                  value={promotionForm.codigo}
+                  onChange={(e) => setPromotionForm({ ...promotionForm, codigo: e.target.value })}
+                />
+              </div>
+            </div>
+            <div>
+              <Label htmlFor="descripcion">Descripción</Label>
+              <Textarea
+                id="descripcion"
+                value={promotionForm.descripcion}
+                onChange={(e) => setPromotionForm({ ...promotionForm, descripcion: e.target.value })}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="tipoPromocion">Tipo de Promoción</Label>
+                <Select
+                  value={promotionForm.tipoPromocion}
+                  onValueChange={(value) => setPromotionForm({ ...promotionForm, tipoPromocion: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecciona un tipo" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      <SelectLabel>Tipos</SelectLabel>
+                      <SelectItem value="DESCUENTO_PORCENTAJE">Descuento Porcentaje</SelectItem>
+                      <SelectItem value="DESCUENTO_MONTO">Descuento por Monto</SelectItem>
+                      <SelectItem value="ENVIO_GRATIS">Envío Gratis</SelectItem>
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label htmlFor="valorDescuento">Valor de Descuento</Label>
+                <Input
+                  id="valorDescuento"
+                  type="number"
+                  value={promotionForm.valorDescuento}
+                  onChange={(e) => setPromotionForm({ ...promotionForm, valorDescuento: e.target.value })}
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="fechaInicio">Fecha de Inicio</Label>
+                <Input
+                  id="fechaInicio"
+                  type="datetime-local"
+                  value={promotionForm.fechaInicio}
+                  onChange={(e) => setPromotionForm({ ...promotionForm, fechaInicio: e.target.value })}
+                />
+              </div>
+              <div>
+                <Label htmlFor="fechaFin">Fecha de Fin</Label>
+                <Input
+                  id="fechaFin"
+                  type="datetime-local"
+                  value={promotionForm.fechaFin}
+                  onChange={(e) => setPromotionForm({ ...promotionForm, fechaFin: e.target.value })}
+                />
+              </div>
+            </div>
+            <div className="flex items-center space-x-2">
+              <Switch
+                id="esAcumulable"
+                checked={promotionForm.esAcumulable}
+                onCheckedChange={(checked) => setPromotionForm({ ...promotionForm, esAcumulable: checked })}
+              />
+              <Label htmlFor="esAcumulable">Acumulable</Label>
+            </div>
+            <div className="flex items-center space-x-2">
+              <Switch
+                id="estaActiva"
+                checked={promotionForm.estaActiva}
+                onCheckedChange={(checked) => setPromotionForm({ ...promotionForm, estaActiva: checked })}
+              />
+              <Label htmlFor="estaActiva">Activa</Label>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowCreatePromotion(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={handleCreatePromotion}>
+              {editingPromotion ? <><Save className="h-4 w-4 mr-2" />Guardar</> : <><Plus className="h-4 w-4 mr-2" />Crear</>}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      
+      {/* Diálogo para ver detalles de promociones */}
+      <Dialog open={!!viewingPromotion} onOpenChange={() => setViewingPromotion(null)}>
+        <DialogContent>
+          {viewingPromotion && (
+            <Card>
+              <CardHeader>
+                <DialogTitle>{viewingPromotion.nombre}</DialogTitle>
+                <DialogDescription>
+                  <div className="flex items-center gap-2 mt-2">
+                    {/* **MODIFICACIÓN:** Se ha añadido esta línea para mostrar el código */}
+                    <Badge variant="outline">Código: {viewingPromotion.codigo}</Badge>
+                    <Badge variant={viewingPromotion.estaActiva ? 'success' : 'destructive'}>
+                      {viewingPromotion.estaActiva ? 'Activa' : 'Inactiva'}
+                    </Badge>
+                  </div>
+                </DialogDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label>Descripción</Label>
+                    <p className="text-sm text-gray-600">{viewingPromotion.descripcion}</p>
+                  </div>
+                  <div>
+                    <Label>Tipo de Promoción</Label>
+                    <p className="text-sm font-medium">{viewingPromotion.tipoPromocion.replace(/_/g, ' ')}</p>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label>Tipo de Condición</Label>
+                    <p className="text-sm font-medium">{viewingPromotion.tipoCondicion.replace(/_/g, ' ')}</p>
+                  </div>
+                  <div>
+                    <Label>Valor de Descuento</Label>
+                    <p className="text-sm font-medium">
+                      {viewingPromotion.tipoPromocion === 'DESCUENTO_PORCENTAJE'
+                        ? `${viewingPromotion.valorDescuento}%`
+                        : `$${viewingPromotion.valorDescuento}`}
+                    </p>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label>Fecha de Inicio</Label>
+                    <p className="text-sm font-medium">{viewingPromotion.fechaInicio.split(' ')[0]}</p>
+                  </div>
+                  <div>
+                    <Label>Fecha de Fin</Label>
+                    <p className="text-sm font-medium">{viewingPromotion.fechaFin.split(' ')[0]}</p>
+                  </div>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <Label>Acumulable</Label>
+                  <Badge variant={viewingPromotion.esAcumulable ? 'success' : 'destructive'}>
+                    {viewingPromotion.esAcumulable ? 'Sí' : 'No'}
+                  </Badge>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </DialogContent>
+      </Dialog>
+      
+      {/* Diálogo para crear/editar cupones */}
+<Dialog open={showCreateCoupon} onOpenChange={setShowCreateCoupon}>
+  <DialogContent>
+    <DialogHeader>
+      <DialogTitle>{editingCoupon ? 'Editar Cupón' : 'Crear Cupón'}</DialogTitle>
+      <DialogDescription>
+        {editingCoupon
+          ? 'Modifica los detalles del cupón existente.'
+          : 'Crea un nuevo cupón de descuento para tus clientes.'}
+      </DialogDescription>
+    </DialogHeader>
+    <div className="space-y-4 py-4">
+      
+      <div>
+        <Label htmlFor="codigo">Código</Label>
+        <Input
+          id="codigo"
+          value={couponForm.codigo}
+          onChange={(e) => setCouponForm({ ...couponForm, codigo: e.target.value })}
+        />
+      </div>
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <Label htmlFor="tipo">Tipo</Label>
+          <Select
+            value={couponForm.tipo}
+            onValueChange={(value) => setCouponForm({ ...couponForm, tipo: value })}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Selecciona un tipo" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                <SelectLabel>Tipos</SelectLabel>
+                <SelectItem value="porcentaje">Porcentaje</SelectItem>
+                <SelectItem value="fijo">Fijo</SelectItem>
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+        </div>
+        <div>
+          <Label htmlFor="descuento">Descuento</Label>
+          <Input
+            id="descuento"
+            type="number"
+            value={couponForm.descuento}
+            onChange={(e) => setCouponForm({ ...couponForm, descuento: e.target.value })}
+          />
+        </div>
+      </div>
+      <div>
+        <Label htmlFor="usos">Usos máximos</Label>
+        <Input
+          id="usos"
+          type="number"
+          value={couponForm.usos}
+          onChange={(e) => setCouponForm({ ...couponForm, usos: e.target.value })}
+        />
+      </div>
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <Label htmlFor="fechaInicio">Fecha de Inicio</Label>
+          <Input
+            id="fechaInicio"
+            type="datetime-local"
+            value={couponForm.fecha_inicio}
+            onChange={(e) => setCouponForm({ ...couponForm, fecha_inicio: e.target.value })}
+          />
+        </div>
+        <div>
+          <Label htmlFor="fechaFin">Fecha de Fin</Label>
+          <Input
+            id="fechaFin"
+            type="datetime-local"
+            value={couponForm.fecha_fin}
+            onChange={(e) => setCouponForm({ ...couponForm, fecha_fin: e.target.value })}
+          />
+        </div>
+      </div>
+
+      {/* Select para elegir la promoción */}
+      <div>
+        <Label htmlFor="promocionId">Promoción Asociada</Label>
+        <Select
+          value={couponForm.promocionId?.toString() || ''}
+          onValueChange={(value) => setCouponForm({ ...couponForm, promocionId: parseInt(value) })}
+        >
+          <SelectTrigger>
+            <SelectValue placeholder="Selecciona una promoción" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectGroup>
+              {promociones.map((promo) => (
+                <SelectItem key={promo.id} value={promo.id.toString()}>
+                  {promo.nombre}
+                </SelectItem>
+              ))}
+            </SelectGroup>
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="flex items-center space-x-2">
+        <Switch
+          id="isActive"
+          checked={couponForm.isActive}
+          onCheckedChange={(checked) => setCouponForm({ ...couponForm, isActive: checked })}
+        />
+        <Label htmlFor="isActive">Activo</Label>
+      </div>
+    </div>
+    <DialogFooter>
+      <Button variant="outline" onClick={() => setShowCreateCoupon(false)}>
+        Cancelar
+      </Button>
+      <Button onClick={editingCoupon ? handleUpdateCoupon : handleCreateCoupon}>
+        {editingCoupon ? <><Save className="h-4 w-4 mr-2" />Guardar</> : <><Plus className="h-4 w-4 mr-2" />Crear</>}
+      </Button>
+    </DialogFooter>
+  </DialogContent>
+</Dialog>
+
     </div>
   );
 }
