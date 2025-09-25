@@ -1339,8 +1339,39 @@ export function AdminDashboard() {
                     <SelectGroup>
                       <SelectLabel>Tipos</SelectLabel>
                       <SelectItem value="DESCUENTO_PORCENTAJE">Descuento Porcentaje</SelectItem>
-                      <SelectItem value="DESCUENTO_MONTO">Descuento por Monto</SelectItem>
+                      <SelectItem value="DESCUENTO_MONTO_FIJO">Descuento por Monto</SelectItem>
+                      <SelectItem value="DOS_POR_UNO">Dos por Uno (2x1)</SelectItem>
                       <SelectItem value="ENVIO_GRATIS">Envío Gratis</SelectItem>
+                      <SelectItem value="REGALO_PRODUCTO">Regalo de Producto</SelectItem>
+                      <SelectItem value="CASHBACK">Cashback</SelectItem>
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label htmlFor="tipoCondicion">Condicion de Aplicacion</Label>
+                <Select
+                  value={promotionForm.tipoCondicion}
+                  onValueChange={(value) => setPromotionForm({ ...promotionForm, tipoCondicion: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecciona la condicion" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      {/* Mapeo de las opciones basado en tu lista de ENUMS del backend */}
+                <SelectItem value="SIN_CONDICION">Sin Condición Especial</SelectItem>
+                <SelectItem value="MONTO_MINIMO">Monto Mínimo de Compra</SelectItem>
+                <SelectItem value="CANTIDAD_PRODUCTOS">Cantidad Mínima de Productos</SelectItem>
+                <SelectItem value="CATEGORIA_ESPECIFICA">Categoría Específica</SelectItem>
+                <SelectItem value="PRODUCTO_ESPECIFICO">Producto Específico</SelectItem>
+                <SelectItem value="DIA_SEMANA">Día de la Semana Específico</SelectItem>
+                <SelectItem value="HORA_ESPECIFICA">Horario Específico</SelectItem>
+                <SelectItem value="POR_HORA">Hora Específica para Condiciones</SelectItem>
+                
+                {/* Estas condiciones son generalmente validadas por el servicio de Lealtad/Usuarios */}
+                <SelectItem value="PRIMER_COMPRA">Primera Compra del Usuario</SelectItem>
+                <SelectItem value="CLIENTE_VIP">Solo Clientes VIP</SelectItem>
                     </SelectGroup>
                   </SelectContent>
                 </Select>
