@@ -2,7 +2,9 @@ package com.componente.promociones.service.impl;
 
 import com.componente.promociones.model.dto.CuponesDTO;
 import com.componente.promociones.model.dto.entity.Cupon;
+import com.componente.promociones.model.dto.entity.Promocion;
 import com.componente.promociones.repository.CuponRepository;
+import com.componente.promociones.repository.PromocionRepository;
 import com.componente.promociones.service.CuponService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -16,13 +18,30 @@ import java.util.stream.Collectors;
 public class CuponServiceImpl implements CuponService {
 
     private final CuponRepository cuponRepository;
+    private final PromocionRepository promocionRepository;
 
     @Override
     public CuponesDTO crearCupon(CuponesDTO dto) {
+        // 1. Convertir el DTO a una entidad Cupon
         Cupon cupon = convertirDtoAEntity(dto);
-        // Al crear, se inicializa usosActuales en 0.
+
+        // 2. Buscar la entidad Promocion en la base de datos usando el ID del DTO.
+        // Usamos findById() que es el método recomendado. Si no se encuentra, lanzamos una excepción.
+        Promocion promocion = promocionRepository.findById(dto.getPromocionId())
+                .orElseThrow(() -> new RuntimeException("Promoción no encontrada con ID: " + dto.getPromocionId()));
+
+        // 3. Asociar el cupón con la promoción encontrada.
+        // Esto es lo que asegura que el campo promocion_id no sea nulo al guardar.
+        cupon.setPromocion(promocion);
+
+        // 4. Inicializar los usos actuales del cupón
         cupon.setUsosActuales(0);
+
+        // 5. Guardar la entidad Cupon en la base de datos.
+        // Ahora que la relación está establecida, la operación será exitosa.
         Cupon cuponGuardado = cuponRepository.save(cupon);
+
+        // 6. Convertir la entidad guardada de nuevo a DTO y retornarla
         return convertirEntityADTO(cuponGuardado);
     }
 

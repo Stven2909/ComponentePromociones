@@ -21,6 +21,10 @@ public class PromocionDTO {
     @Size(min =3, max=100, message= "El nombre debe tener entre 3 y 100 caracteres")
     private String nombre;
 
+    @NotBlank(message = "El codigo es obligatorio")
+    @Size(min = 4, max = 10, message = "El codigo debe tener entre 4 y 10 caracteres")
+    private String codigo;
+
     @Size(max = 500, message = "La descripción no puede exceder 500 caracteres")
     private String descripcion;
 

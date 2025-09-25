@@ -2,6 +2,10 @@ package com.componente.promociones.service;
 
 import com.componente.promociones.model.dto.PromocionDTO;
 import com.componente.promociones.model.dto.integraciones.lealtad.PromocionesDisponiblesResponse;
+import com.componente.promociones.model.dto.integraciones.lealtad.facturacion.FacturacionPromocionRequest;
+import com.componente.promociones.model.dto.integraciones.lealtad.facturacion.FacturacionPromocionResponse;
+import com.componente.promociones.model.dto.integraciones.lealtad.facturacion.ProductoFactura;
+import com.componente.promociones.model.dto.integraciones.lealtad.facturacion.PromocionesDisponiblesFacturacionResponse;
 import org.w3c.dom.stylesheets.LinkStyle;
 
 import java.util.List;
@@ -22,4 +26,8 @@ public interface PromocionService {
 
     //🔗 integrar con lealtad
     PromocionesDisponiblesResponse obtenerPromocionesParaPuntos(Long clienteId, int puntos, String tipoPromocion);
+
+    // 🔗integrar con facturacion
+    PromocionesDisponiblesFacturacionResponse obtenerPromocionesParaFacturacion(String account, List<ProductoFactura> productos);
+    FacturacionPromocionResponse aplicarPromocionParaFacturacion(FacturacionPromocionRequest request);
 }

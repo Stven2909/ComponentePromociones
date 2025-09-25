@@ -25,6 +25,9 @@ public class Promocion {
     @Column(nullable = false, length = 100)
     private String nombre;
 
+    @Column(unique = true, nullable = false)
+    private String codigo;
+
     @Column(length = 500)
     private String descripcion;
 

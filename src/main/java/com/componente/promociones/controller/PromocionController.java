@@ -4,6 +4,10 @@ import com.componente.promociones.model.dto.DashboardStatsDTO;
 import com.componente.promociones.model.dto.PromocionDTO;
 import com.componente.promociones.model.dto.integraciones.lealtad.PromocionesDisponiblesResponse;
 import com.componente.promociones.model.dto.integraciones.lealtad.PuntosLealtadRequest;
+import com.componente.promociones.model.dto.integraciones.lealtad.facturacion.FacturacionConsultaRequest;
+import com.componente.promociones.model.dto.integraciones.lealtad.facturacion.FacturacionPromocionRequest;
+import com.componente.promociones.model.dto.integraciones.lealtad.facturacion.FacturacionPromocionResponse;
+import com.componente.promociones.model.dto.integraciones.lealtad.facturacion.PromocionesDisponiblesFacturacionResponse;
 import com.componente.promociones.service.CuponService;
 import com.componente.promociones.service.PromocionService;
 import jakarta.validation.Valid;
@@ -94,5 +98,19 @@ public class PromocionController {
                 );
                 return ResponseEntity.ok(response);
     }
+
+    //🔗 Integracion con Facturacion
+    @PostMapping("/integracion/facturacion/promociones-disponibles")
+    public ResponseEntity<PromocionesDisponiblesFacturacionResponse> obtenerPromocionesParaFacturacion(
+            @RequestBody @Valid FacturacionConsultaRequest request) {
+        return ResponseEntity.ok(promocionService.obtenerPromocionesParaFacturacion(request.getAccount(), request.getProductos()));
+    }
+
+    @PostMapping("/integracion/facturacion/aplicar-promocion")
+    public ResponseEntity<FacturacionPromocionResponse> aplicarPromocionParaFacturacion(
+            @RequestBody @Valid FacturacionPromocionRequest request) {
+        return ResponseEntity.ok(promocionService.aplicarPromocionParaFacturacion(request));
+    }
+
 }
 

@@ -1,19 +1,21 @@
 package com.componente.promociones.service.impl;
 
+import com.componente.promociones.enums.TipoCondicion;
 import com.componente.promociones.enums.TipoPromocion;
 import com.componente.promociones.model.dto.PromocionDTO;
-import com.componente.promociones.model.dto.entity.Cupon;
 import com.componente.promociones.model.dto.entity.Promocion;
 import com.componente.promociones.model.dto.integraciones.lealtad.PromocionesDisponiblesResponse;
+import com.componente.promociones.model.dto.integraciones.lealtad.facturacion.*;
 import com.componente.promociones.repository.CuponRepository;
 import com.componente.promociones.repository.PromocionRepository;
 import com.componente.promociones.service.PromocionService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
-import org.springframework.ws.server.endpoint.annotation.PayloadRoot;
 
 import java.time.LocalDateTime;
+import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 @Service
@@ -123,15 +125,188 @@ public class PromocionServiceImpl implements PromocionService {
         return response;
     }
 
+    //🔗 Para Facturacion
+    @Override
+    public PromocionesDisponiblesFacturacionResponse obtenerPromocionesParaFacturacion(String account, List<ProductoFactura> productos) {
+        //Obtener todas las promos activas y vigentes
+        List<Promocion> promocionesActivas = promocionRepository.findPromocionesActivasYVigentes(LocalDateTime.now());
 
+        //Mapear promociones a DTOs de respuesta, filtrando las aplicables
+        List<PromocionDisponible> promocionesDisponibles = promocionesActivas.stream()
+                .filter(promo -> aplicaCondicion(promo, productos))
+                .map(promo -> {
+                    PromocionDisponible disponible = new PromocionDisponible();
+                    disponible.setCodigo(promo.getCodigo());
+                    disponible.setNombre(promo.getNombre());
+                    disponible.setDescripcion(promo.getDescripcion());
+                    disponible.setTipoPromocion(promo.getTipoPromocion());
+
+                    //Calcular descuento estimado segun tipo y totalCompra
+                    double descuentoEstimado = calcularDescuentoEstimado(promo, productos);
+                    disponible.setDescuentoEstimado(descuentoEstimado);
+                    return disponible;
+                })
+                .filter(p -> p.getDescuentoEstimado() > 0) //solo mostrar promos aplicables
+                .collect(Collectors.toList());
+
+        //Calcular total de la compra
+        double totalCompra = productos.stream()
+                .mapToDouble(p -> p.getPrice() * p.getQuantity())
+                .sum();
+
+        //Construir respuesta
+        PromocionesDisponiblesFacturacionResponse response = new PromocionesDisponiblesFacturacionResponse();
+        response.setAccount(account);
+        response.setTotalCompra(totalCompra);
+        response.setPromocionesDisponibles(promocionesDisponibles);
+        return response;
+    }
+
+    @Override
+    public FacturacionPromocionResponse aplicarPromocionParaFacturacion(FacturacionPromocionRequest request) {
+        FacturacionPromocionResponse response = new FacturacionPromocionResponse();
+        response.setAccount(request.getAccount());
+
+        Optional<Promocion> promocionOpt = promocionRepository.findByCodigo(request.getCodigoPromocion());
+
+        //Validar que la promocion exista, este activa y sea aplicable a la compra
+        if (promocionOpt.isEmpty() || !promocionOpt.get().getEstaActiva() || !aplicaCondicion(promocionOpt.get(), request.getProductos())) {
+            response.setPromocionAplicada(false);
+            response.setMensaje("Promocion no encontrada, inactiva o no aplicable");
+            return response;
+        }
+
+        Promocion promocion = promocionOpt.get();
+
+        //Distribuir el descuento entre los productos
+        List<ProductoConDescuento> productosConDescuento = aplicarDescuento(promocion, request.getProductos());
+
+        //Calcular el monto total del descuento
+        double montoDescuentoTotal = productosConDescuento.stream()
+                .mapToDouble(ProductoConDescuento::getDescuentoAplicado)
+                .sum();
+
+        //Calcular la compra original
+        double totalOriginal = request.getProductos().stream()
+                .mapToDouble(p-> p.getPrice() * p.getQuantity())
+                .sum();
+
+        // Construir respuesta final
+        response.setPromocionAplicada(true);
+        response.setCodigoPromocionUsada(promocion.getCodigo());
+        response.setNombrePromocion(promocion.getNombre());
+        response.setMontoDescuento(montoDescuentoTotal);
+        response.setPorcentajeDescuento((montoDescuentoTotal / totalOriginal) * 100);
+        response.setProductosConDescuento(productosConDescuento);
+        response.setMensaje("Promoción aplicada correctamente");
+
+        return response;
+    }
+
+    // --- Métodos Privados para la Lógica---
+
+    private boolean aplicaCondicion(Promocion promocion, List<ProductoFactura> productos) {
+        switch (promocion.getTipoCondicion()) {
+            case MONTO_MINIMO:
+                double totalCompra = productos.stream().mapToDouble(p -> p.getPrice() * p.getQuantity()).sum();
+                return totalCompra >= promocion.getValorDescuento();
+            case CANTIDAD_PRODUCTOS:
+                int cantidadTotalProductos = productos.stream().mapToInt(ProductoFactura::getQuantity).sum();
+                return cantidadTotalProductos >= promocion.getValorDescuento();
+            case PRODUCTO_ESPECIFICO:
+            case CATEGORIA_ESPECIFICA:
+                // Requiere una lógica para buscar si al menos un producto de la lista cumple la condición
+                return false; // Implementar la lógica
+            case DIA_SEMANA:
+            case HORA_ESPECIFICA:
+            case POR_HORA:
+                // Requiere verificar el día y la hora actuales
+                return false; // Implementar la lógica
+            case SIN_CONDICION:
+                return true; // Siempre aplica
+            case PRIMER_COMPRA:
+            case CLIENTE_VIP:
+                // Estas condiciones no pueden ser validadas solo con los datos de facturación (request).
+                // Requieren una integración mas avanzada con el microservicio de lealtad o de usuarios para validar.
+                return false;
+            default:
+                return false;
+        }
+    }
+
+    private double calcularDescuentoEstimado(Promocion promocion, List<ProductoFactura> productos) {
+        double totalCompra = productos.stream().mapToDouble(p -> p.getPrice() * p.getQuantity()).sum();
+
+        switch (promocion.getTipoPromocion()) {
+            case DESCUENTO_PORCENTAJE:
+                return totalCompra * (promocion.getValorDescuento() / 100);
+            case DESCUENTO_MONTO_FIJO:
+                return promocion.getValorDescuento();
+            case ENVIO_GRATIS:
+            case DOS_POR_UNO:
+            case TRES_POR_DOS:
+            case REGALO_PRODUCTO:
+            case CASHBACK:
+                // Estos tipos de promociones no tienen un "monto estimado o fijo" que sea simple.
+                // Su cálculo es más complejo y se hace en el momento de la aplicación final.
+                return 0.0;
+            default:
+                return 0.0;
+        }
+    }
+
+    private List<ProductoConDescuento> aplicarDescuento(Promocion promocion, List<ProductoFactura> productos) {
+        double totalOriginal = productos.stream().mapToDouble(p -> p.getPrice() * p.getQuantity()).sum();
+
+        switch (promocion.getTipoPromocion()) {
+            case DESCUENTO_PORCENTAJE:
+                double montoPorcentaje = totalOriginal * (promocion.getValorDescuento() / 100);
+                return distribuirDescuentoProporcional(productos, montoPorcentaje, totalOriginal);
+            case DESCUENTO_MONTO_FIJO:
+                return distribuirDescuentoProporcional(productos, promocion.getValorDescuento(), totalOriginal);
+            case DOS_POR_UNO:
+            case TRES_POR_DOS:
+            case ENVIO_GRATIS:
+            case REGALO_PRODUCTO:
+            case CASHBACK:
+                // Estos tipos de promociones no se aplican directamente como un descuento proporcional
+                // a los productos y requieren lógica de negocio más compleja.
+                return Collections.emptyList();
+            default:
+                return Collections.emptyList();
+        }
+    }
+
+    private List<ProductoConDescuento> distribuirDescuentoProporcional(List<ProductoFactura> productos, double montoDescuento, double totalOriginal) {
+        return productos.stream().map(p -> {
+            ProductoConDescuento pd = new ProductoConDescuento();
+            pd.setId(p.getId());
+            pd.setName(p.getName());
+            pd.setQuantity(p.getQuantity());
+            pd.setPrecioOriginal(p.getPrice());
+
+            double descuentoProporcional = (p.getPrice() * p.getQuantity() / totalOriginal) * montoDescuento;
+            pd.setDescuentoAplicado(descuentoProporcional);
+
+            double precioTotalConDescuento = (p.getPrice() * p.getQuantity()) - descuentoProporcional;
+            pd.setPrecioConDescuento(precioTotalConDescuento / p.getQuantity());
+
+            return pd;
+        }).collect(Collectors.toList());
+    }
+
+    // --- Métodos de Conversión ---
 
     /**
      * Convierte un PromocionDTO a una entidad
      */
-    private Promocion convertirDtoAEntity(PromocionDTO dto){
+    private Promocion convertirDtoAEntity(PromocionDTO dto) {
         Promocion promocion = new Promocion();
-        //promocion.setId(dto.getId());
+        if (dto.getId() != null) {
+            promocion.setId(dto.getId());
+        }
         promocion.setNombre(dto.getNombre());
+        promocion.setCodigo(dto.getCodigo());
         promocion.setDescripcion(dto.getDescripcion());
         promocion.setTipoPromocion(dto.getTipoPromocion());
         promocion.setTipoCondicion(dto.getTipoCondicion());
@@ -143,14 +318,14 @@ public class PromocionServiceImpl implements PromocionService {
         return promocion;
     }
 
-
     /**
      * Convierte una entidad a un DTO
      */
-    private PromocionDTO convertirEntityaDTO(Promocion promocion){
+    private PromocionDTO convertirEntityaDTO(Promocion promocion) {
         PromocionDTO dto = new PromocionDTO();
         dto.setId(promocion.getId());
         dto.setNombre(promocion.getNombre());
+        dto.setCodigo(promocion.getCodigo());
         dto.setDescripcion(promocion.getDescripcion());
         dto.setTipoPromocion(promocion.getTipoPromocion());
         dto.setTipoCondicion(promocion.getTipoCondicion());
@@ -162,7 +337,3 @@ public class PromocionServiceImpl implements PromocionService {
         return dto;
     }
 }
-
-
-
-

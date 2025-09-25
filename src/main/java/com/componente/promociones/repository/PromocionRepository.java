@@ -9,6 +9,7 @@ import org.springframework.data.repository.query.Param;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 
 public interface PromocionRepository extends JpaRepository<Promocion, Long> {
 
@@ -43,6 +44,9 @@ public interface PromocionRepository extends JpaRepository<Promocion, Long> {
      * Cuenta las promociones activas
      */
     long countByEstaActivaTrue();
+
+    //para facturacion
+    Optional<Promocion> findByCodigo(String codigo);
 
 
 }
