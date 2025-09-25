@@ -100,6 +100,14 @@ public class PromocionServiceImpl implements PromocionService {
     }
 
     // 🔗 Para lealtad
+
+    /**
+     * Obtiene las promociones disponibles para un cliente especifico, basado en tipo y cantidad de puntos
+     * @param clienteId El id del cliente
+     * @param puntos los puntos del cliente (actualmente no se usan en la logica de fitlrado)
+     * @param tipoPromocionStr el tipo de promo a buscar
+     * @return un dto de respuesta con la lista de nombres de promos disponibles
+     */
     @Override
     public PromocionesDisponiblesResponse obtenerPromocionesParaPuntos(Long clienteId, int puntos, String tipoPromocionStr) {
         // Validación y conversión a Enum
@@ -113,6 +121,7 @@ public class PromocionServiceImpl implements PromocionService {
         // Buscar promociones por tipo y filtrar activas
         List<Promocion> promociones = promocionRepository.findByTipoPromocion(tipoPromocion);
 
+        //Filtra la lista para incluir solo las promos activas y extra los nombres
         List<String> nombresPromociones = promociones.stream()
                 .filter(Promocion::getEstaActiva)
                 .map(Promocion::getNombre)
@@ -126,6 +135,13 @@ public class PromocionServiceImpl implements PromocionService {
     }
 
     //🔗 Para Facturacion
+
+    /**
+     * Obtiene la lista de promociones aplicables a una compra antes de finalizarla
+     * @param account el identificador de la cuenta o del cliente
+     * @param productos la lista de productos en la compra
+     * @return un DTO de respuesta con las promos disponibles y un descuento estimado
+     */
     @Override
     public PromocionesDisponiblesFacturacionResponse obtenerPromocionesParaFacturacion(String account, List<ProductoFactura> productos) {
         //Obtener todas las promos activas y vigentes
@@ -162,11 +178,17 @@ public class PromocionServiceImpl implements PromocionService {
         return response;
     }
 
+    /**
+     * Aplica una promocion a una compra especifica, calculando los descuentos reales
+     * @param request la solicitud que contiene el codigo de la promo y los productos de la compra
+     * @return un DTO de respuesta que detalla el descuento aplicado y los nuevos precios
+     */
     @Override
     public FacturacionPromocionResponse aplicarPromocionParaFacturacion(FacturacionPromocionRequest request) {
         FacturacionPromocionResponse response = new FacturacionPromocionResponse();
         response.setAccount(request.getAccount());
 
+        //Busca la promocion por su codigo en el repositorio
         Optional<Promocion> promocionOpt = promocionRepository.findByCodigo(request.getCodigoPromocion());
 
         //Validar que la promocion exista, este activa y sea aplicable a la compra
@@ -205,23 +227,29 @@ public class PromocionServiceImpl implements PromocionService {
 
     // --- Métodos Privados para la Lógica---
 
+    /**
+     * Determina si una promo aplica a una lista de productos basandose en su tipo de condicion
+     * @param promocion la promo a evaluar
+     * @param productos la lista de productos de la compra
+     * @return 'true' si la condicion se cumple, 'false' en caso de que no
+     */
     private boolean aplicaCondicion(Promocion promocion, List<ProductoFactura> productos) {
         switch (promocion.getTipoCondicion()) {
             case MONTO_MINIMO:
                 double totalCompra = productos.stream().mapToDouble(p -> p.getPrice() * p.getQuantity()).sum();
-                return totalCompra >= promocion.getValorDescuento();
+                return totalCompra >= promocion.getValorDescuento(); //Verifica si la compra supera el monto minimo
             case CANTIDAD_PRODUCTOS:
                 int cantidadTotalProductos = productos.stream().mapToInt(ProductoFactura::getQuantity).sum();
-                return cantidadTotalProductos >= promocion.getValorDescuento();
+                return cantidadTotalProductos >= promocion.getValorDescuento(); //verifica si la cantidad de productos supera la minima
             case PRODUCTO_ESPECIFICO:
             case CATEGORIA_ESPECIFICA:
                 // Requiere una lógica para buscar si al menos un producto de la lista cumple la condición
-                return false; // Implementar la lógica
+                return false; // Logica pendiente
             case DIA_SEMANA:
             case HORA_ESPECIFICA:
             case POR_HORA:
                 // Requiere verificar el día y la hora actuales
-                return false; // Implementar la lógica
+                return false; // Logica pendiente
             case SIN_CONDICION:
                 return true; // Siempre aplica
             case PRIMER_COMPRA:
@@ -234,6 +262,12 @@ public class PromocionServiceImpl implements PromocionService {
         }
     }
 
+    /**
+     * Calcula el monto de descuento estimado para una compra, basandose en el tipo de promocion
+     * @param promocion la promocion para la cual se calcula el descuento
+     * @param productos la lista de productos en la compra
+     * @return el monto estimado del descuento
+     */
     private double calcularDescuentoEstimado(Promocion promocion, List<ProductoFactura> productos) {
         double totalCompra = productos.stream().mapToDouble(p -> p.getPrice() * p.getQuantity()).sum();
 
@@ -241,27 +275,32 @@ public class PromocionServiceImpl implements PromocionService {
             case DESCUENTO_PORCENTAJE:
                 return totalCompra * (promocion.getValorDescuento() / 100);
             case DESCUENTO_MONTO_FIJO:
-                return promocion.getValorDescuento();
+                return promocion.getValorDescuento(); //Retorna el valor fijo del descuento
             case ENVIO_GRATIS:
             case DOS_POR_UNO:
             case TRES_POR_DOS:
             case REGALO_PRODUCTO:
             case CASHBACK:
-                // Estos tipos de promociones no tienen un "monto estimado o fijo" que sea simple.
-                // Su cálculo es más complejo y se hace en el momento de la aplicación final.
+                // El cálculo para estos tipos de promociones es más complejo que un simple monto fijo y no se puede estimar tan facil.
                 return 0.0;
             default:
                 return 0.0;
         }
     }
 
+    /**
+     * Aplica el descuento real a cada producto en la lista, segun el tipo de promocion
+     * @param promocion la promo a aplicar
+     * @param productos la lista de productos
+     * @return una lista de productos con el descuento aplicado
+     */
     private List<ProductoConDescuento> aplicarDescuento(Promocion promocion, List<ProductoFactura> productos) {
         double totalOriginal = productos.stream().mapToDouble(p -> p.getPrice() * p.getQuantity()).sum();
 
         switch (promocion.getTipoPromocion()) {
             case DESCUENTO_PORCENTAJE:
                 double montoPorcentaje = totalOriginal * (promocion.getValorDescuento() / 100);
-                return distribuirDescuentoProporcional(productos, montoPorcentaje, totalOriginal);
+                return distribuirDescuentoProporcional(productos, montoPorcentaje, totalOriginal); //Llama a un metodo para distribuir el descuento
             case DESCUENTO_MONTO_FIJO:
                 return distribuirDescuentoProporcional(productos, promocion.getValorDescuento(), totalOriginal);
             case DOS_POR_UNO:
@@ -269,15 +308,22 @@ public class PromocionServiceImpl implements PromocionService {
             case ENVIO_GRATIS:
             case REGALO_PRODUCTO:
             case CASHBACK:
-                // Estos tipos de promociones no se aplican directamente como un descuento proporcional
-                // a los productos y requieren lógica de negocio más compleja.
+                //Estos tipos de promociones requieren una lógica de negocio más específica y no se aplican proporcionalmente.
                 return Collections.emptyList();
             default:
                 return Collections.emptyList();
         }
     }
 
+    /**
+     * Distribuye un monto de descuento de manera proporcional al valor de cada producto en la compra
+     * @param productos la lista de productos
+     * @param montoDescuento el monto total del descuento a distribuir
+     * @param totalOriginal el total original de la compra
+     * @return una lista de DTOs que contiene el precio original y el de descuento
+     */
     private List<ProductoConDescuento> distribuirDescuentoProporcional(List<ProductoFactura> productos, double montoDescuento, double totalOriginal) {
+        //Usa Stream API para iterar sobre cada producto y calcular el descuento
         return productos.stream().map(p -> {
             ProductoConDescuento pd = new ProductoConDescuento();
             pd.setId(p.getId());
@@ -285,9 +331,11 @@ public class PromocionServiceImpl implements PromocionService {
             pd.setQuantity(p.getQuantity());
             pd.setPrecioOriginal(p.getPrice());
 
+            //Calcula que porcentaje del total representa el producto y aplica ese mismo al descuento total
             double descuentoProporcional = (p.getPrice() * p.getQuantity() / totalOriginal) * montoDescuento;
             pd.setDescuentoAplicado(descuentoProporcional);
 
+            //CAlcula el precio final del producto con el descuento aolicado
             double precioTotalConDescuento = (p.getPrice() * p.getQuantity()) - descuentoProporcional;
             pd.setPrecioConDescuento(precioTotalConDescuento / p.getQuantity());
 
@@ -295,10 +343,12 @@ public class PromocionServiceImpl implements PromocionService {
         }).collect(Collectors.toList());
     }
 
-    // --- Métodos de Conversión ---
+    // --- Métodos de Conversión (DTO <-> Entidad) ---
 
     /**
-     * Convierte un PromocionDTO a una entidad
+     * Convierte un objeto DTO a una entidad
+     * @param dto el dto a convertir
+     * @return la entidad resultante
      */
     private Promocion convertirDtoAEntity(PromocionDTO dto) {
         Promocion promocion = new Promocion();
@@ -319,7 +369,9 @@ public class PromocionServiceImpl implements PromocionService {
     }
 
     /**
-     * Convierte una entidad a un DTO
+     * Convierte una entidad Promocion a un objeto DTO para ser pasados al frontend
+     * @param promocion la entidad a convertir
+     * @return el dto resultante
      */
     private PromocionDTO convertirEntityaDTO(Promocion promocion) {
         PromocionDTO dto = new PromocionDTO();
