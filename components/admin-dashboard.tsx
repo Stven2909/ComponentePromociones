@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, use } from 'react';
 import { useToast } from './ui/use-toast';
 import {
   Card,
@@ -94,6 +94,8 @@ export function AdminDashboard() {
   const [editingCoupon, setEditingCoupon] = useState<any>(null);
   const [editingCampaign, setEditingCampaign] = useState<any>(null);
   const [promociones, setPromociones] = useState<Promocion[]>([]);
+  //Agregada para la actividad reciente
+  const [recentActivity, setRecentActivity] = useState<any[]>([]);
   const [coupons, setCoupons] = useState<any[]>([]);
   const { toast } = useToast();
 
@@ -175,12 +177,40 @@ export function AdminDashboard() {
     },
   ]);
 
-  // Datos mockeados para actividad reciente
-  const recentActivity = [
-    { action: 'Nueva promoción "Verano"', time: 'Hace 5 minutos', status: 'Activa', type: 'success' },
-    { action: 'Cupón "FREESHIP" expirado', time: 'Hace 1 hora', status: 'Expirado', type: 'warning' },
-    { action: 'Campaña "Black Friday" creada', time: 'Ayer', status: 'Borrador', type: 'info' },
-  ];
+  // Funcionar para generar activad reciente real con promos y cupones
+  const generateRecentActivity = () => {
+    const activity: any[] = [];
+    //Promos
+    promociones.forEach((promo) => {
+      activity.push({ 
+        action: `Nueva promoción "${promo.nombre}"`, 
+        time: promo.fechaInicio ? new Date(promo.fechaInicio).toLocaleString() : 'Fecha no disponible',
+        status: promo.estaActiva ? 'Activa' : 'Inactiva',
+        type: promo.estaActiva ? 'success' : 'warning',
+      });
+  });
+
+  //Cupones
+  coupons.forEach((c) => {
+    activity.push({
+      action: `Cupón "${c.code}" - ${c.promocionNombre}`, // Incluir promoción
+      time: c.fecha_inicio ? new Date(c.fecha_inicio).toLocaleString() : 'Fecha no disponible',
+      status: c.status, // Usar c.status en lugar de c.isActive
+      type: c.isActive ? 'success' : 'warning',
+    });
+  });
+
+  // Ordenar por fecha más reciente
+  activity.sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime());
+
+  setRecentActivity(activity);
+};
+
+  //Fetch para actualizar actividad reciente
+  useEffect(() => {
+    generateRecentActivity();
+  }, [promociones, coupons]);
+
 
   // Función para fetch de promociones activas desde el backend
   const fetchPromociones = async () => {
@@ -205,42 +235,56 @@ export function AdminDashboard() {
     }
   };
 
-  // Función para fetch de cupones activos desde el backend
-  const fetchCupones = async () => {
-    try {
-      const response = await fetch(`http://localhost:8502/service-main/api/cupones`, {
-        method: 'GET',
-        credentials: 'include',
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.message || `Error ${response.status}: No se pudieron cargar los cupones`);
-      }
-
-      const data = await response.json();
-      // Mapear los datos para que coincidan con la estructura esperada en la tabla
-      const formattedCoupons = data.map((coupon: any) => ({
-        id: coupon.id,
-        code: coupon.codigo,
-        type: coupon.tipo,
-        discount: coupon.descuento,
-        uses: coupon.usos || 0,
-        maxUses: coupon.usos || 0, // Ajustar según el backend
-        status: coupon.estado === 'ACTIVO' ? 'Activo' : 'Inactivo',
-        created: coupon.fecha_inicio,
-      }));
-      setCoupons(formattedCoupons);
-      console.log('Formatted coupons:', formattedCoupons); // Debug log
-    } catch (error) {
-      console.error('Error fetching cupones:', error);
-      toast({
-        title: 'Error',
-        description: error instanceof Error ? error.message : 'No se pudieron cargar los cupones',
-        variant: 'destructive',
-      });
-    }
-  };
+         // Función para fetch de cupones activos desde el backend
+        const fetchCupones = async (promocionesData: Promocion[] = promociones) => {
+          try {
+            console.log('Cargando cupones con promociones:', promocionesData); // Debug
+        
+            const response = await fetch(`http://localhost:8502/service-main/api/cupones`, {
+              method: 'GET',
+              credentials: 'include',
+            });
+        
+            if (!response.ok) {
+              const errorData = await response.json().catch(() => ({}));
+              throw new Error(errorData.message || `Error ${response.status}: No se pudieron cargar los cupones`);
+            }
+        
+            const data = await response.json();
+            console.log('Datos raw de cupones:', data); // Debug
+        
+            // Mapear los datos para que coincidan con la estructura esperada en la tabla
+            const formattedCoupons = data.map((coupon: any) => {
+              // USAR promocionesData en lugar de promociones del estado
+              const promocionAsociada = promocionesData.find((p) => p.id === coupon.promocionId);
+              
+              console.log(`Cupón ${coupon.codigo}: promocionId=${coupon.promocionId}, promoción encontrada:`, promocionAsociada?.nombre || 'No encontrada');
+        
+              return {
+                id: coupon.id,
+                code: coupon.codigo,
+                type: coupon.tipo,
+                discount: coupon.descuento,
+                uses: coupon.usos || 0,
+                maxUses: coupon.usos || 0,
+                status: coupon.estado === 'ACTIVO' ? 'Activo' : 'Inactivo',
+                created: coupon.fecha_inicio,
+                promocionId: coupon.promocionId, // Guardar referencia
+                promocionNombre: promocionAsociada?.nombre || 'Sin promoción asignada',
+              };
+            });
+        
+            setCoupons(formattedCoupons);
+            console.log('Cupones formateados:', formattedCoupons); // Debug
+          } catch (error) {
+            console.error('Error fetching cupones:', error);
+            toast({
+              title: 'Error',
+              description: error instanceof Error ? error.message : 'No se pudieron cargar los cupones',
+              variant: 'destructive',
+            });
+          }
+        };
 
   // Función para fetch de estadísticas del dashboard desde el backend
   const fetchDashboardStats = async () => {
@@ -303,17 +347,50 @@ export function AdminDashboard() {
 
   // Effect para cargar datos según la pestaña activa
   useEffect(() => {
-    if (activeTab === 'promotions') {
-      fetchPromociones();
+    const loadData = async () => {
+      if (activeTab === 'promotions') {
+        await fetchPromociones();
+      }
+      
+      if (activeTab === 'coupons') {
+        let promos = promociones;
+  
+        // Si no hay promociones cargadas, obtenlas primero
+        if (promos.length === 0) {
+          try {
+            const response = await fetch(`${API_BASE_URL}`, {
+              method: 'GET',
+              credentials: 'include',
+            });
+            
+            if (response.ok) {
+              const data = await response.json();
+              setPromociones(data);
+              promos = data; // usar directamente para mapear cupones
+            }
+          } catch (error) {
+            console.error('Error cargando promociones:', error);
+          }
+        }
+  
+        // PASAR promos como parámetro
+        await fetchCupones(promos);
+      }
+      
+      if (activeTab === 'dashboard') {
+        await fetchDashboardStats();
+      }
     }
-    if (activeTab === 'coupons') {
-      fetchCupones();
-    }
-    if (activeTab === 'dashboard') {
-      fetchDashboardStats();
-    }
+    loadData();
   }, [activeTab]);
-
+  
+  // Y también en el segundo useEffect:
+  useEffect(() => {
+    if(promociones.length > 0 && activeTab === 'coupons'){
+      fetchCupones(promociones); // PASAR promociones como parámetro
+    }
+  }, [promociones]);;
+  
   // Función para ver detalles de una promoción (abre diálogo modal)
   const handleViewPromotion = (promotion: Promocion) => {
     setViewingPromotion(promotion);
@@ -670,6 +747,7 @@ export function AdminDashboard() {
       estado: couponForm.isActive ? 'ACTIVO' : 'INACTIVO',
       fecha_inicio: formatDateForBackend(couponForm.fecha_inicio),
       fecha_fin: formatDateForBackend(couponForm.fecha_fin),
+      promocionId: couponForm.promocionId, // Agregado
     };
 
     try {
@@ -1145,68 +1223,108 @@ export function AdminDashboard() {
                 </Card>
               </div>
             )}
-            {activeTab === 'coupons' && (
-              <div className="space-y-6">
-                <div className="flex items-center justify-between">
-                  <h2 className="text-2xl font-bold">Gestión de Cupones</h2>
-                  <Button onClick={() => { setShowCreateCoupon(true); resetCouponForm(); }}>
-                    <Plus className="h-4 w-4 mr-2" />
-                    Crear Cupón
-                  </Button>
-                </div>
-                <Card>
-                  <CardContent className="p-6">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Código</TableHead>
-                          <TableHead>Tipo</TableHead>
-                          <TableHead>Descuento</TableHead>
-                          <TableHead>Usos</TableHead>
-                          <TableHead>Estado</TableHead>
-                          <TableHead>Fechas</TableHead>
-                          <TableHead className="text-right">Acciones</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {coupons.map((coupon) => (
-                          <TableRow key={coupon.id}>
-                            <TableCell className="font-medium">{coupon.code}</TableCell>
-                            <TableCell>{coupon.type}</TableCell>
-                            <TableCell>{coupon.discount}</TableCell>
-                            <TableCell>{coupon.uses}</TableCell>
-                            <TableCell>
-                              <Badge variant={coupon.status === 'Activo' ? 'success' : 'destructive'}>
-                                {coupon.status}
-                              </Badge>
-                            </TableCell>
-                            <TableCell>
-                              <div className="flex flex-col text-xs text-gray-500">
-                                <span>Inicio: {coupon.created.split(' ')[0]}</span>
-                                <span>Fin: {coupon.created.split(' ')[0]}</span> {/* Ajustar según el backend */}
-                              </div>
-                            </TableCell>
-                            <TableCell className="text-right">
-                              <div className="flex justify-end gap-2">
-                                <Button variant="ghost" size="sm" onClick={() => handleEditCoupon(coupon)}>
-                                  <Edit className="h-4 w-4" />
-                                </Button>
-                                <Button variant="ghost" size="sm" onClick={() => handleDeleteCoupon(coupon.id)}>
-                                  <Trash2 className="h-4 w-4 text-red-500" />
-                                </Button>
-                                <Button variant="ghost" size="sm" onClick={() => handleToggleCouponStatus(coupon.id)}>
-                                  <Switch checked={coupon.status === 'Activo'} />
-                                </Button>
-                              </div>
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </CardContent>
-                </Card>
-              </div>
+          {activeTab === 'coupons' && (
+  <div className="space-y-6">
+    <div className="flex items-center justify-between">
+      <h2 className="text-2xl font-bold">Gestión de Cupones</h2>
+      <Button onClick={() => { setShowCreateCoupon(true); resetCouponForm(); }}>
+        <Plus className="h-4 w-4 mr-2" />
+        Crear Cupón
+      </Button>
+    </div>
+    <Card>
+      <CardContent className="p-6">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Código</TableHead>
+              <TableHead>Tipo</TableHead>
+              <TableHead>Promoción Asociada</TableHead>
+              <TableHead>Descuento</TableHead>
+              <TableHead>Usos</TableHead>
+              <TableHead>Estado</TableHead>
+              <TableHead>Fechas</TableHead>
+              <TableHead className="text-right">Acciones</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {coupons.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={8} className="text-center py-6 text-gray-500">
+                  No hay cupones disponibles
+                </TableCell>
+              </TableRow>
+            ) : (
+              coupons.map((coupon) => (
+                <TableRow key={coupon.id}>
+                  <TableCell className="font-medium">{coupon.code}</TableCell>
+                  <TableCell className="capitalize">{coupon.type}</TableCell>
+                  <TableCell>
+                    <span className={coupon.promocionNombre === 'Sin promoción asignada' ? 'text-gray-400' : 'text-green-600 font-medium'}>
+                      {coupon.promocionNombre}
+                    </span>
+                  </TableCell>
+                  <TableCell>
+                    {coupon.type === 'porcentaje' ? `${coupon.discount}%` : `$${coupon.discount}`}
+                  </TableCell>
+                  <TableCell>
+                    <span className="text-sm">
+                      {coupon.uses}/{coupon.maxUses || '∞'}
+                    </span>
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant={coupon.status === 'Activo' ? 'default' : 'destructive'}>
+                      {coupon.status}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex flex-col text-xs text-gray-500">
+                      <span>
+                        Inicio: {coupon.created ? new Date(coupon.created).toLocaleDateString('es-ES') : 'N/A'}
+                      </span>
+                      {/* Agregar fecha fin cuando esté disponible en el backend */}
+                      <span>
+                        Fin: {coupon.fechaFin ? new Date(coupon.fechaFin).toLocaleDateString('es-ES') : 'Sin límite'}
+                      </span>
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <div className="flex justify-end gap-2">
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        onClick={() => handleEditCoupon(coupon)}
+                        title="Editar cupón"
+                      >
+                        <Edit className="h-4 w-4" />
+                      </Button>
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        onClick={() => handleDeleteCoupon(coupon.id)}
+                        title="Eliminar cupón"
+                      >
+                        <Trash2 className="h-4 w-4 text-red-500" />
+                      </Button>
+                      {/* Switch corregido - no debería ser un botón */}
+                      <div className="flex items-center">
+                        <Switch 
+                          checked={coupon.status === 'Activo'} 
+                          onCheckedChange={() => handleToggleCouponStatus(coupon.id)}
+                          title={`${coupon.status === 'Activo' ? 'Desactivar' : 'Activar'} cupón`}
+                        />
+                      </div>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))
             )}
+          </TableBody>
+        </Table>
+      </CardContent>
+    </Card>
+  </div>
+)}
             {activeTab === 'campaigns' && (
               <div className="space-y-6">
                 <div className="flex items-center justify-between">
