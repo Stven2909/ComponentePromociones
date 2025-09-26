@@ -105,6 +105,12 @@ public class CuponServiceImpl implements CuponService {
         cuponExistente.setFechaInicio(dto.getFecha_inicio());
         cuponExistente.setFechaFin(dto.getFecha_fin());
 
+        if (dto.getPromocionId() != null){
+            Promocion promocion = promocionRepository.findById(dto.getPromocionId())
+                    .orElseThrow(() -> new RuntimeException("Promocion no encontrada con ID: " + dto.getTipo()));
+            cuponExistente.setPromocion(promocion);
+        }
+
         // 3. Guarda la entidad. Spring Data JPA realiza una operación de "update" porque el objeto tiene un ID.
         Cupon cuponActualizado = cuponRepository.save(cuponExistente);
         // 4. Convierte y retorna la entidad actualizada.
@@ -163,6 +169,10 @@ public class CuponServiceImpl implements CuponService {
         dto.setEstado(cupon.getEstado());
         dto.setFecha_inicio(cupon.getFechaInicio());
         dto.setFecha_fin(cupon.getFechaFin());
+
+        if (cupon.getPromocion() != null){
+            dto.setPromocionId(cupon.getPromocion().getId());
+        }
         return dto;
     }
 }
