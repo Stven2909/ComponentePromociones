@@ -269,6 +269,7 @@ export function AdminDashboard() {
                 maxUses: coupon.usos || 0,
                 status: coupon.estado === 'ACTIVO' ? 'Activo' : 'Inactivo',
                 created: coupon.fecha_inicio,
+                fechaFin: coupon.fecha_fin,
                 promocionId: coupon.promocionId, // Guardar referencia
                 promocionNombre: promocionAsociada?.nombre || 'Sin promoción asignada',
               };
