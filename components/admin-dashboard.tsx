@@ -449,25 +449,23 @@ const handleTogglePromotionStatus = async (id: number) => {
   ]
 
   const COLORS = ["#8b5cf6", "#a78bfa", "#c4b5fd", "#ddd6fe"]
+  const diasSemana = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
 
-  const weeklyData = [
-    { dia: "Lun", promociones: 45, cupones: 32 },
-    { dia: "Mar", promociones: 52, cupones: 41 },
-    { dia: "Mié", promociones: 61, cupones: 38 },
-    { dia: "Jue", promociones: 58, cupones: 47 },
-    { dia: "Vie", promociones: 70, cupones: 55 },
-    { dia: "Sáb", promociones: 85, cupones: 68 },
-    { dia: "Dom", promociones: 78, cupones: 62 },
-  ]
 
-  const monthlyRevenueData = [
-    { mes: "Ene", ingresos: 4500, descuentos: 450 },
-    { mes: "Feb", ingresos: 5200, descuentos: 520 },
-    { mes: "Mar", ingresos: 6100, descuentos: 610 },
-    { mes: "Abr", ingresos: 5800, descuentos: 580 },
-    { mes: "May", ingresos: 7000, descuentos: 700 },
-    { mes: "Jun", ingresos: 8500, descuentos: 850 },
-  ]
+  const weeklyData = diasSemana.map((dia, idx) => ({
+    dia,
+    promociones: promociones.filter(p => new Date(p.startDate).getDay() === idx).length,
+    cupones: cupones.filter(c => new Date(c.startDate).getDay() === idx).length,
+  }));
+
+  const meses = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
+
+const monthlyRevenueData = meses.map((mes, i) => {
+  const ingresos = promociones.reduce((sum, p) => sum + (p.ingresosMes?.[i] || 0), 0);
+  const descuentos = promociones.reduce((sum, p) => sum + (p.descuentosMes?.[i] || 0), 0);
+  return { mes, ingresos, descuentos };
+});
+
 
   const categoryPerformance = [
     { categoria: "Temporada", valor: 85 },
@@ -477,14 +475,11 @@ const handleTogglePromotionStatus = async (id: number) => {
     { categoria: "Primera Compra", valor: 95 },
   ]
 
-  const conversionData = [
-    { hora: "00:00", conversiones: 12 },
-    { hora: "04:00", conversiones: 8 },
-    { hora: "08:00", conversiones: 25 },
-    { hora: "12:00", conversiones: 45 },
-    { hora: "16:00", conversiones: 38 },
-    { hora: "20:00", conversiones: 52 },
-  ]
+  const conversionData = Array.from({ length: 24 }, (_, h) => ({
+    hora: `${h}:00`,
+    conversiones: [...promociones, ...cupones].filter(item => new Date(item.startDate).getHours() === h).length,
+  }));
+  
 
   const filteredPromotions = promociones.filter((promocion) => {
     const matchesSearch =
@@ -556,29 +551,54 @@ const handleTogglePromotionStatus = async (id: number) => {
 // Función para fetch de promociones activas desde el backend
 const fetchPromociones = async () => {
   console.log('--- [FETCH] Iniciando fetchPromociones...');
-try {
-const response = await fetch(PROMOCIONES_URL, { 
-method: 'GET',
-credentials: 'include',
-});
-if (!response.ok) {
-const errorData = await response.json().catch(() => ({}));
-throw new Error(errorData.message || `Error ${response.status}: No se pudieron cargar las promociones`);
-}
-const data = await response.json();
+  try {
+    const response = await fetch(PROMOCIONES_URL, {
+      method: 'GET',
+      credentials: 'include',
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(
+        errorData.message || `Error ${response.status}: No se pudieron cargar las promociones`
+      );
+    }
+
+    const data = await response.json();
     console.log('--- [FETCH Promociones OK] Promociones cargadas:', data.length);
-setPromociones(data);
-return data; // Retornar data para uso inmediato en fetchCupones
-} catch (error) {
-console.error('Error fetching promociones:', error);
-toast({
-title: 'Error',
-description: error instanceof Error ? error.message : 'No se pudieron cargar las promociones',
-variant: 'destructive',
-});
-return []; // Retornar array vacío en caso de error
-}
+
+    // 🧠 Mapear los datos del backend al formato que usa el frontend
+    const formattedPromos = data.map((promo: any) => ({
+      id: promo.id,
+      name: promo.nombre, // antes "nombre"
+      description: promo.descripcion, // antes "descripcion"
+      type: promo.tipoPromocion,
+      condition: promo.tipoCondicion,
+      discount: promo.valorDescuento,
+      startDate: promo.fechaInicio,
+      endDate: promo.fechaFin,
+      stackable: promo.esAcumulable,
+      status: promo.estaActiva ? "active" : "paused", // antes "estaActiva"
+      usage: promo.usos || 0,
+      maxUsage: promo.maxUsage || 0,
+    }));
+
+    setPromociones(formattedPromos);
+    return formattedPromos; // Retornar data formateada para fetchCupones
+  } catch (error) {
+    console.error('Error fetching promociones:', error);
+    toast({
+      title: 'Error',
+      description:
+        error instanceof Error
+          ? error.message
+          : 'No se pudieron cargar las promociones',
+      variant: 'destructive',
+    });
+    return [];
+  }
 };
+
 
 // Función para fetch de cupones activos desde el backend
 const fetchCupones = async (promocionesData: PromocionBackend[] = promociones) => {
@@ -599,24 +619,25 @@ const fetchCupones = async (promocionesData: PromocionBackend[] = promociones) =
   
   // Mapear los datos para que coincidan con la estructura esperada en la tabla
   const formattedCoupons = data.map((coupon: any) => {
-  // USAR promocionesData en lugar de promociones del estado
-  const promocionAsociada = promocionesData.find((p) => p.id === coupon.promocionId);
+    // USAR promocionesData en lugar de promociones del estado
+    const promocionAsociada = promocionesData.find((p) => p.id === coupon.promocionId);
   
   console.log(`--- [MAPPING] Cupón ${coupon.codigo}: ID Promoción=${coupon.promocionId}, Nombre: ${promocionAsociada?.nombre || 'No encontrada'}`);
   
   return {
-  id: coupon.id,
-  code: coupon.codigo,
-  type: coupon.tipo,
-  discount: coupon.descuento,
-  uses: coupon.usos || 0,
-  maxUses: coupon.usos || 0,
-  status: coupon.estado === 'ACTIVO' ? 'Activo' : 'Inactivo',
-  created: coupon.fecha_inicio,
-  fechaFin: coupon.fecha_fin,
-  promocionId: coupon.promocionId, // Guardar referencia
-  promocionNombre: promocionAsociada?.nombre || 'Sin promoción asignada',
+    id: coupon.id,
+    code: coupon.codigo,
+    type: coupon.tipo,
+    discount: coupon.descuento,
+    uses: coupon.usos || 0,
+    maxUsage: coupon.usosMaximos || 0,
+    status: coupon.estado === 'ACTIVO' ? 'active' : 'paused',
+    created: coupon.fecha_inicio,
+    fechaFin: coupon.fecha_fin,
+    promocionId: coupon.promocionId,
+    promocionNombre: promocionAsociada?.name || 'Sin promoción asignada',
   };
+
   });
   
   setCupones(formattedCoupons);
@@ -1399,19 +1420,19 @@ const fetchDashboardStats = async () => {
                       <TableRow key={promociones.id}>
                         <TableCell>
                           <div>
-                            <p className="font-medium">{promociones.nombre}</p>
+                            <p className="font-medium">{promociones.name}</p>
                             <p className="text-xs text-gray-500">{promociones.descripcion}</p>
                           </div>
                         </TableCell>
                         <TableCell>
                           <span className="px-2 py-1 bg-purple-100 text-purple-700 rounded-full text-xs">
-                            {promociones.categoria}
+                            {promociones.category || "Sin categoria"}
                           </span>
                         </TableCell>
-                        <TableCell className="text-purple-600 font-semibold">{promociones.valorDescuento}</TableCell>
+                        <TableCell className="text-purple-600 font-semibold">{promociones.discount}</TableCell>
                         <TableCell className="text-gray-600">${promociones.minPurchase}</TableCell>
-                        <TableCell>{promociones.fecha_inicio}</TableCell>
-                        <TableCell>{promociones.fecha_fin}</TableCell>
+                        <TableCell>{promociones.startDate}</TableCell>
+                        <TableCell>{promociones.endDate}</TableCell>
                         <TableCell>
                           <div className="space-y-1">
                             <div className="text-sm">
@@ -1420,7 +1441,7 @@ const fetchDashboardStats = async () => {
                             <div className="w-full bg-gray-200 rounded-full h-2">
                               <div
                                 className="bg-purple-500 h-2 rounded-full transition-all"
-                                style={{ width: `${(promociones.usos / promociones.maxUsage) * 100}%` }}
+                                style={{ width: `${(promociones.usage / promociones.maxUsage) * 100}%` }}
                               />
                             </div>
                           </div>
@@ -2275,10 +2296,70 @@ const fetchDashboardStats = async () => {
         {
           /* ... existing code with tooltips already added ... */
         }
+          // --- Datos dinámicos ---
+  const usageData = [
+    { name: "Promociones", usos: promociones.reduce((acc, p) => acc + p.usage, 0) },
+    { name: "Cupones", usos: cupones.reduce((acc, c) => acc + c.usage, 0) },
+  ];
+
+  const statusData = [
+    {
+      name: "Activas",
+      value:
+        promociones.filter((p) => p.status === "active").length +
+        cupones.filter((c) => c.status === "active").length,
+    },
+    {
+      name: "Pausadas",
+      value:
+        promociones.filter((p) => p.status === "paused").length +
+        cupones.filter((c) => c.status === "paused").length,
+    },
+  ];
+
+  const categoryPerformance = [
+    { categoria: "Temporada", valor: 85 },
+    { categoria: "Evento Especial", valor: 92 },
+    { categoria: "Bienvenida", valor: 78 },
+    { categoria: "General", valor: 88 },
+    { categoria: "Primera Compra", valor: 95 },
+  ];
+
+  // --- Uso semanal dinámico ---
+  const diasSemana = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
+  const weeklyData = diasSemana.map((dia, idx) => ({
+    dia,
+    promociones: promociones.filter(
+      (p) => new Date(p.startDate).getDay() === (idx + 1) % 7
+    ).length,
+    cupones: cupones.filter((c) => new Date(c.startDate).getDay() === (idx + 1) % 7).length,
+  }));
+
+  // --- Ingresos y descuentos mensuales dinámicos ---
+  const meses = ["Ene","Feb","Mar","Abr","May","Jun"];
+  const monthlyRevenueData = meses.map((mes, i) => ({
+    mes,
+    ingresos: promociones.reduce((sum, p) => sum + (p.ingresosMes?.[i] || 0), 0) +
+              cupones.reduce((sum, c) => sum + (c.ingresosMes?.[i] || 0), 0),
+    descuentos: promociones.reduce((sum, p) => sum + (p.descuentosMes?.[i] || 0), 0) +
+               cupones.reduce((sum, c) => sum + (c.descuentosMes?.[i] || 0), 0),
+  }));
+
+  // --- Conversiones por hora ---
+  const conversionData = Array.from({ length: 6 }, (_, i) => ({
+    hora: ["00:00","04:00","08:00","12:00","16:00","20:00"][i],
+    conversiones: [...promociones, ...cupones].filter(
+      (item) => new Date(item.startDate).getHours() === [0,4,8,12,16,20][i]
+    ).length,
+  }));
+
+  const COLORS = ["#8b5cf6", "#a78bfa", "#c4b5fd", "#ddd6fe"];
         return (
           <div className="space-y-6">
             <h2 className="text-3xl font-bold text-gray-800">Análisis</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+            {/* Tendencias de Uso */}
               <div className="bg-gradient-to-br from-purple-50 to-white p-6 rounded-lg shadow-lg border border-purple-100">
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="text-lg font-semibold text-gray-800 flex items-center">
@@ -2326,6 +2407,7 @@ const fetchDashboardStats = async () => {
                 </ResponsiveContainer>
               </div>
 
+        {/* Distribución de Estados */}
               <div className="bg-gradient-to-br from-purple-50 to-white p-6 rounded-lg shadow-lg border border-purple-100">
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="text-lg font-semibold text-gray-800 flex items-center">
@@ -2389,6 +2471,7 @@ const fetchDashboardStats = async () => {
                 </ResponsiveContainer>
               </div>
 
+        {/* Uso Semanal */}
               <div className="bg-gradient-to-br from-purple-50 to-white p-6 rounded-lg shadow-lg border border-purple-100 md:col-span-2">
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="text-lg font-semibold text-gray-800 flex items-center">
@@ -2456,6 +2539,7 @@ const fetchDashboardStats = async () => {
                 </ResponsiveContainer>
               </div>
 
+        {/* Ingresos vs Descuentos */}
               <div className="bg-gradient-to-br from-purple-50 to-white p-6 rounded-lg shadow-lg border border-purple-100">
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="text-lg font-semibold text-gray-800 flex items-center">
@@ -2513,6 +2597,7 @@ const fetchDashboardStats = async () => {
                 </ResponsiveContainer>
               </div>
 
+        {/* Rendimiento por Categoría */}
               <div className="bg-gradient-to-br from-purple-50 to-white p-6 rounded-lg shadow-lg border border-purple-100">
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="text-lg font-semibold text-gray-800 flex items-center">
@@ -2561,6 +2646,7 @@ const fetchDashboardStats = async () => {
                 </ResponsiveContainer>
               </div>
 
+{/* Conversiones por Hora */}
               <div className="bg-gradient-to-br from-purple-50 to-white p-6 rounded-lg shadow-lg border border-purple-100 md:col-span-2">
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="text-lg font-semibold text-gray-800 flex items-center">
