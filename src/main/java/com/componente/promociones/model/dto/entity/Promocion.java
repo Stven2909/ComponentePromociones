@@ -56,8 +56,25 @@ public class Promocion {
     @Column(name = "esta_activa", columnDefinition = "BOOLEAN DEFAULT true")
     private Boolean estaActiva = true;
 
+    @Column(name = "usos_totales")
+    private Integer usosTotales;
+
+    @Column(name = "usos_maximos")
+    private Integer usosMaximos;
+
+    @Column(name = "monto_total_descontado")
+    private Double montoTotalDescontado;
+
+
     // 🔗 Relación con Cupones (la promocion debe conocer a sus cupones)
     @OneToMany(mappedBy = "promocion", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<Cupon> cupones = new ArrayList<>();
+
+    //Nuevo campo para vinculo con Categorias de inventario
+    @Column(name = "categoria_id")
+    private Long categoriaId;
+
+    @Column(name = "producto_id")
+    private Long productoId;
 
 }

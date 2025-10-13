@@ -1,6 +1,6 @@
 plugins {
 	id 'java'
-	id 'org.springframework.boot' version '3.5.3'
+	id 'org.springframework.boot' version '3.3.4'  // Corregido a versión estable; ajusta si es necesario
 	id 'io.spring.dependency-management' version '1.1.7'
 }
 
@@ -19,29 +19,53 @@ configurations {
 	}
 }
 
-//Aqui hay que moverle
 repositories {
 	mavenCentral()
-	maven {url 'https://jitpack.io'} //repositorio jitpack
+	maven { url 'https://jitpack.io' }  // Repositorio JitPack
+}
+
+ext {
+	set('springCloudVersion', "2023.0.3")  // Actualizado para compatibilidad con Spring Boot 3.3.x
+}
+
+// Mover dependencyManagement ANTES de dependencies para que el BOM se aplique correctamente
+dependencyManagement {
+	imports {
+		mavenBom "org.springframework.cloud:spring-cloud-dependencies:${springCloudVersion}"
+	}
 }
 
 dependencies {
-	//
+	// Dependencias custom y starters
 	implementation 'com.github.xsismadn3ss:shared-dtos:v1.0.18'
 	implementation 'org.springframework.boot:spring-boot-starter-amqp'
-	implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.8.5'
-	runtimeOnly 'com.mysql:mysql-connector-j' //tambien
-
 	implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
 	implementation 'org.springframework.boot:spring-boot-starter-mail'
 	implementation 'org.springframework.boot:spring-boot-starter-web'
 	implementation 'org.springframework.boot:spring-boot-starter-web-services'
+	implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.3.0'
+	implementation 'org.postgresql:postgresql'
+	runtimeOnly 'com.mysql:mysql-connector-j'  // Si usas MySQL en runtime
+
+	// Para Feign (ahora se resolverá correctamente con el BOM)
+	implementation 'org.springframework.cloud:spring-cloud-starter-openfeign'
+	// Necesario para que Feign sepa a dónde llamar (reemplazo de Ribbon en SB3)
+	implementation 'org.springframework.cloud:spring-cloud-starter-loadbalancer'
+
+	// Lombok y devtools
 	compileOnly 'org.projectlombok:lombok'
 	annotationProcessor 'org.projectlombok:lombok'
 	developmentOnly 'org.springframework.boot:spring-boot-devtools'
 
+	implementation 'ch.qos.logback:logback-classic:1.4.11'  // versión compatible con Spring Boot 3.3.x
+
+
+	// Tests
 	testImplementation 'org.springframework.boot:spring-boot-starter-test'
 	testImplementation 'org.springframework.amqp:spring-rabbit-test'
+
+	testImplementation 'com.h2database:h2'
+
 	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 

@@ -35,6 +35,10 @@ public class Cupon {
     @Column(nullable = false)
     private String estado;
 
+    @Column(name = "monto_total_descontado")
+    private Double montoTotalDescontado;
+
+
     // Campos de fecha para la validación
     @Column(nullable = false, name = "fecha_inicio")
     private LocalDateTime fechaInicio;

@@ -8,16 +8,24 @@ import com.componente.promociones.model.dto.integraciones.lealtad.facturacion.Fa
 import com.componente.promociones.model.dto.integraciones.lealtad.facturacion.FacturacionPromocionRequest;
 import com.componente.promociones.model.dto.integraciones.lealtad.facturacion.FacturacionPromocionResponse;
 import com.componente.promociones.model.dto.integraciones.lealtad.facturacion.PromocionesDisponiblesFacturacionResponse;
+import com.componente.promociones.model.dto.integraciones.lealtad.inventario.CategoriaDTO;
+import com.componente.promociones.model.dto.integraciones.lealtad.inventario.InventarioClient;
+import com.componente.promociones.model.dto.integraciones.lealtad.inventario.ProductoDTO;
+import com.componente.promociones.repository.PromocionRepository;
 import com.componente.promociones.service.CuponService;
 import com.componente.promociones.service.PromocionService;
+import feign.FeignException;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 
+@Slf4j
 @RestController
 @RequestMapping("/api/promociones")
 @RequiredArgsConstructor
@@ -25,6 +33,9 @@ public class PromocionController {
 
     private final PromocionService promocionService;
     private final CuponService cuponService;
+    private final PromocionRepository promocionRepository;
+    private final InventarioClient inventarioClient;
+
 
     //Crear Promo
     @PostMapping
@@ -68,6 +79,16 @@ public class PromocionController {
         return ResponseEntity.noContent().build();
     }
 
+    // Obtener promoción por código
+    @GetMapping("/by-codigo")
+    public ResponseEntity<PromocionDTO> obtenerPromocionPorCodigo(@RequestParam String codigo) {
+        return promocionService.obtenerPromocionPorCodigo(codigo)
+                .map(ResponseEntity::ok)
+                .orElse(ResponseEntity.notFound().build());
+    }
+
+
+
     /**
      * Endpoint para obtener las estadisticas del dashboard
      */
@@ -76,12 +97,14 @@ public class PromocionController {
         long promocionesActivas = promocionService.contarPromocionesActivas();
         long cuponesUtilizados = promocionService.contarCuponesUtilizados();
         long cuponesActivos = promocionService.contarCuponesActivos();
+        long usosTotales = promocionService.contarUsosTotales();
 
-        DashboardStatsDTO stats = new DashboardStatsDTO(
-                promocionesActivas,
-                cuponesUtilizados,
-                cuponesActivos
-        );
+        DashboardStatsDTO stats = new DashboardStatsDTO();
+
+        stats.setPromocionesActivas(promocionesActivas);
+        stats.setCuponesActivos(cuponesActivos);
+        stats.setCuponesUtilizados(cuponesUtilizados);
+        stats.setUsosTotales((int) usosTotales);
 
         return ResponseEntity.ok(stats);
     }
@@ -112,5 +135,102 @@ public class PromocionController {
         return ResponseEntity.ok(promocionService.aplicarPromocionParaFacturacion(request));
     }
 
+    // 🔗 Integración con Inventario
+    @GetMapping("/integracion/inventario/productos")
+    public ResponseEntity<List<ProductoDTO>> obtenerProductosDeInventario() {
+        List<ProductoDTO> productos = inventarioClient.listarProductos();
+        return ResponseEntity.ok(productos);
+    }
+
+    @GetMapping("/integracion/inventario/productos/{id}")
+    public ResponseEntity<ProductoDTO> obtenerProductoPorId(@PathVariable Long id) {
+        if (id == null) {
+            return ResponseEntity.badRequest().build();
+        }
+        try {
+            ProductoDTO producto = inventarioClient.obtenerProducto(id);
+            return ResponseEntity.ok(producto);
+        } catch (FeignException.NotFound e) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.BAD_GATEWAY).build();
+        }
+    }
+
+    @GetMapping("/integracion/inventario/productos/by-name")
+    public ResponseEntity<List<ProductoDTO>> buscarProductoPorNombre(@RequestParam String name) {
+        List<ProductoDTO> productos = inventarioClient.buscarPorNombre(name);
+        return ResponseEntity.ok(productos);
+    }
+
+    @GetMapping("/integracion/inventario/productos/categoria/{id}")
+    public ResponseEntity<List<ProductoDTO>> listarPorCategoria(@PathVariable Long id) {
+        List<ProductoDTO> productos = inventarioClient.listarPorCategoria(id);
+        return ResponseEntity.ok(productos);
+    }
+
+    @PostMapping("/crear-por-inventario")
+    public ResponseEntity<?> crearPromoPorInventario(
+            @RequestParam(required = true) Long productoId,
+            @RequestBody PromocionDTO promocionDTO
+    ) {
+        if (productoId == null) {
+            return ResponseEntity.badRequest().body("El parámetro productoId es obligatorio");
+        }
+
+        try {
+            PromocionDTO creada = promocionService.crearPromocionPorProducto(productoId, promocionDTO);
+            return ResponseEntity.status(HttpStatus.CREATED).body(creada);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        } catch (RuntimeException e) {
+            return ResponseEntity.status(HttpStatus.BAD_GATEWAY).body(e.getMessage());
+        }
+    }
+
+
+
+
+
+    // 🔗para las categorias
+    @GetMapping("/integracion/inventario/categorias")
+    public ResponseEntity<List<CategoriaDTO>> obtenerCategoriasDeInventario() {
+        List<CategoriaDTO> categorias = inventarioClient.listarCategorias();
+        return ResponseEntity.ok(categorias);
+    }
+
+    @GetMapping("/integracion/inventario/categorias/{id}")
+    public ResponseEntity<?> obtenerCategoriaPorId(@PathVariable Long id) {
+        try {
+            log.info("🔍 Intentando obtener categoría ID: {} desde Inventario", id);
+
+            CategoriaDTO categoria = inventarioClient.obtenerCategoriaPorId(id);
+
+            log.info("✅ Categoría obtenida exitosamente: {}", categoria);
+            return ResponseEntity.ok(categoria);
+
+        } catch (FeignException.NotFound e) {
+            log.error("❌ Categoría no encontrada en Inventario - Status 404: {}", e.getMessage());
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(Map.of("error", "Categoría no encontrada", "id", id));
+
+        } catch (FeignException.ServiceUnavailable e) {
+            log.error("❌ Servicio de Inventario no disponible - Status 503: {}", e.getMessage());
+            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                    .body(Map.of("error", "Servicio de Inventario temporalmente no disponible"));
+
+        } catch (FeignException e) {
+            log.error("❌ Error de Feign - Status {}: {}", e.status(), e.contentUTF8());
+            return ResponseEntity.status(e.status())
+                    .body(Map.of("error", "Error al comunicarse con Inventario", "details", e.getMessage()));
+
+        } catch (Exception e) {
+            log.error("❌ Error inesperado al consultar Inventario: {}", e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", "Error interno", "message", e.getMessage()));
+        }
+    }
 }
+
+
 

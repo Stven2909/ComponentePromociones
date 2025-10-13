@@ -3,6 +3,7 @@ package com.componente.promociones;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.annotation.Bean;
+import org.springframework.cloud.openfeign.EnableFeignClients;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 import org.springframework.web.filter.CorsFilter;
@@ -10,6 +11,7 @@ import org.springframework.web.filter.CorsFilter;
 import java.util.Arrays;
 
 @SpringBootApplication
+@EnableFeignClients
 public class PromocionesApplication {
 
 	public static void main(String[] args) {
@@ -20,8 +22,25 @@ public class PromocionesApplication {
 	public CorsFilter corsFilter() {
 		CorsConfiguration corsConfiguration = new CorsConfiguration();
 		corsConfiguration.setAllowCredentials(true);
-		// Agregar http://localhost:3000 para Next.js
-		corsConfiguration.setAllowedOrigins(Arrays.asList("http://localhost:3000", "http://localhost:4200"));
+
+		// ----------------------------------------------------------------------
+		// AJUSTE CRUCIAL: Se agrega el dominio HTTPS del frontend
+		// ----------------------------------------------------------------------
+		corsConfiguration.setAllowedOrigins(Arrays.asList(
+				// Origen HTTPS de Producción (donde entra el frontend)
+				"https://promotions.beckysflorist.site",
+				// Orígenes de Desarrollo y pruebas internas (se dejan por si acaso)
+				"http://localhost:3000",
+				"http://localhost:3001",
+				"http://localhost:4200",
+				"http://37.60.238.21",
+				"https://37.60.238.21" // IP con HTTPS (opcional)
+
+				// Los orígenes "localhost:3001" y "http://37.60.238.21:3001"
+				// se eliminan o simplifican ya que el tráfico entra por Nginx (puerto 80/443)
+		));
+		// ----------------------------------------------------------------------
+
 		corsConfiguration.setAllowedHeaders(Arrays.asList(
 				"Origin",
 				"Access-Control-Allow-Origin",

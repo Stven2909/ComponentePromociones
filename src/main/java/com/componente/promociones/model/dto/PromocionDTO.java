@@ -36,7 +36,7 @@ public class PromocionDTO {
 
     @NotNull(message = "El valor del descuento es obligatorio")
     @DecimalMin(value = "0.0", inclusive = false, message = "El valor del descuento debe ser mayor que 0")
-    private float valorDescuento;
+    private Float valorDescuento;
 
     @NotNull(message = "La fecha de inicio es obligatoria")
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
@@ -48,4 +48,15 @@ public class PromocionDTO {
 
     private boolean esAcumulable;
     private boolean estaActiva;
+
+    @Min(value = 0, message = "Los usos totales no pueden ser negativos")
+    private Integer usosTotales;
+
+    @Min(value = 0, message = "Los usos máximos no pueden ser negativos")
+    private Integer usosMaximos;
+
+
+    //para inventario
+    private Long productoId;
+    private Long categoriaId;
 }

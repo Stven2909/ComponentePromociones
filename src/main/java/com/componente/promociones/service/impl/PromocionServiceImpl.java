@@ -3,13 +3,21 @@ package com.componente.promociones.service.impl;
 import com.componente.promociones.enums.TipoCondicion;
 import com.componente.promociones.enums.TipoPromocion;
 import com.componente.promociones.model.dto.PromocionDTO;
+import com.componente.promociones.model.dto.entity.Cupon;
 import com.componente.promociones.model.dto.entity.Promocion;
+import com.componente.promociones.model.dto.entity.UsoDescuento;
 import com.componente.promociones.model.dto.integraciones.lealtad.PromocionesDisponiblesResponse;
 import com.componente.promociones.model.dto.integraciones.lealtad.facturacion.*;
+import com.componente.promociones.model.dto.integraciones.lealtad.inventario.InventarioClient;
+import com.componente.promociones.model.dto.integraciones.lealtad.inventario.ProductoDTO;
+import com.componente.promociones.model.dto.tracking.AplicarDescuentoRequest;
+import com.componente.promociones.model.dto.tracking.AplicarDescuentoResponse;
 import com.componente.promociones.repository.CuponRepository;
 import com.componente.promociones.repository.PromocionRepository;
+import com.componente.promociones.repository.UsosDescuentoRepository;
 import com.componente.promociones.service.PromocionService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -18,12 +26,16 @@ import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class PromocionServiceImpl implements PromocionService {
 
     private final PromocionRepository promocionRepository;
     private final CuponRepository cuponRepository;
+    private final InventarioClient inventarioClient;
+
+    private final UsosDescuentoRepository usosDescuentoRepository;
 
     @Override
     public PromocionDTO crearPromocion(PromocionDTO dto) {
@@ -53,17 +65,39 @@ public class PromocionServiceImpl implements PromocionService {
 
     @Override
     public PromocionDTO actualizarPromocion(Long id, PromocionDTO promocionDTO) {
-        //Verificar que exista
+        // Verificar existencia
         Promocion promocionExiste = promocionRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Promocion no encontrada con ID: " + id));
-        //Convertir DTO a Entidad
-        Promocion promocionActualizada = convertirDtoAEntity(promocionDTO);
-        promocionActualizada.setId(id);
+                .orElseThrow(() -> new RuntimeException("Promoción no encontrada con ID: " + id));
 
-        //Guardar cambios
-        Promocion promocionGuardada = promocionRepository.save(promocionActualizada);
+        // Validación defensiva
+        if (promocionDTO.getFechaFin().isBefore(promocionDTO.getFechaInicio())) {
+            throw new IllegalArgumentException("La fecha de fin no puede ser anterior a la fecha de inicio");
+        }
+
+        // Logging para trazabilidad
+        log.info("Actualizando promoción ID {} con datos: {}", id, promocionDTO);
+
+        // Actualizar campos sobre la entidad existente
+        promocionExiste.setNombre(promocionDTO.getNombre());
+        promocionExiste.setCodigo(promocionDTO.getCodigo());
+        promocionExiste.setDescripcion(promocionDTO.getDescripcion());
+        promocionExiste.setTipoPromocion(promocionDTO.getTipoPromocion());
+        promocionExiste.setTipoCondicion(promocionDTO.getTipoCondicion());
+        promocionExiste.setValorDescuento(promocionDTO.getValorDescuento());
+        promocionExiste.setFechaInicio(promocionDTO.getFechaInicio());
+        promocionExiste.setFechaFin(promocionDTO.getFechaFin());
+        promocionExiste.setEsAcumulable(promocionDTO.isEsAcumulable());
+        promocionExiste.setEstaActiva(promocionDTO.isEstaActiva());
+        promocionExiste.setCategoriaId(promocionDTO.getCategoriaId());
+        promocionExiste.setProductoId(promocionDTO.getProductoId()); // ⚠️ este campo no se estaba asignando
+
+        // Guardar cambios
+        Promocion promocionGuardada = promocionRepository.save(promocionExiste);
+
+        // Retornar DTO actualizado
         return convertirEntityaDTO(promocionGuardada);
     }
+
 
     @Override
     public void eliminarPromocion(Long id) {
@@ -87,6 +121,203 @@ public class PromocionServiceImpl implements PromocionService {
     public long contarPromocionesActivas() {
         //Usar el metodo del repositorio
         return promocionRepository.countByEstaActivaTrue();
+    }
+
+    //para los usos totales (puede requerir revision)
+    @Override
+    public long contarUsosTotales() {
+        return cuponRepository.countByUsosActualesGreaterThan(0);
+    }
+
+    @Override
+    public Optional<PromocionDTO> obtenerPromocionPorCodigo(String codigo) {
+        return promocionRepository.findByCodigo(codigo)
+                .map(promocion -> new PromocionDTO(
+                        promocion.getId(),
+                        promocion.getNombre(),
+                        promocion.getCodigo(),
+                        promocion.getDescripcion(),
+                        promocion.getTipoPromocion(),
+                        promocion.getTipoCondicion(),
+                        promocion.getValorDescuento(),
+                        promocion.getFechaInicio(),
+                        promocion.getFechaFin(),
+                        promocion.getEsAcumulable(),
+                        promocion.getEstaActiva(),
+                        promocion.getUsosTotales(),
+                        promocion.getUsosMaximos(),
+                        promocion.getProductoId(),
+                        promocion.getCategoriaId()
+                ));
+
+    }
+
+    @Override
+    public PromocionDTO crearPromocionPorProducto(Long productoId, PromocionDTO promocionDTO) {
+        if (productoId == null) {
+            throw new IllegalArgumentException("El ID del producto no puede ser null");
+        }
+
+        ProductoDTO producto;
+        try {
+            producto = inventarioClient.obtenerProducto(productoId);
+        } catch (Exception e) {
+            throw new RuntimeException("Error al consultar el producto en Inventario: " + e.getMessage(), e);
+        }
+
+        if (producto == null || producto.getActivo() == null || !producto.getActivo()) {
+            throw new RuntimeException("Producto no encontrado o no activo en Inventario");
+        }
+
+        // Ajustar la promoción según el producto
+        promocionDTO.setNombre(promocionDTO.getNombre() + " - " + producto.getNombre());
+        promocionDTO.setValorDescuento(
+                producto.getStockMaximo() != null ? producto.getStockMaximo().floatValue() : 0f
+        );
+
+        return crearPromocion(promocionDTO);
+    }
+
+
+    // para tracking (nuevo)
+    @Override
+    public AplicarDescuentoResponse AplicarYRegistarUso(AplicarDescuentoRequest request) {
+        AplicarDescuentoResponse response = new AplicarDescuentoResponse();
+        response.setCodigo(request.getCodigo()); // Establecer código desde el inicio
+
+        // 1. Logica: Buscar promo o cupon por codigo
+        Optional<Promocion> promocionOpt = promocionRepository.findByCodigo(request.getCodigo());
+
+        if(promocionOpt.isEmpty()){
+            response.setMensaje("Promocion o Cupon no encontrado.");
+            response.setMontoDescuento(0.0);
+            response.setMontoFinal(request.getMontoOriginal());
+            return response;
+        }
+
+        Promocion promocion = promocionOpt.get();
+
+        // 2. Logica: Validar que este activa y no haya expirado
+        // Se añade validación de fecha, asumiendo que no se hizo antes.
+        if(!promocion.getEstaActiva() || promocion.getFechaFin().isBefore(LocalDateTime.now())){
+            response.setMensaje("Promocion Inactiva o Expirada.");
+            response.setMontoDescuento(0.0);
+            response.setMontoFinal(request.getMontoOriginal());
+            return response;
+        }
+
+        // 3. Logica: Calcular descuento (usando precio original)
+        double montoDescuento = calcularMontoDescuentoParaTracking(promocion, request.getMontoOriginal());
+
+        //Calculo y declaracion de montofinal
+        double montoFinal = request.getMontoOriginal() - montoDescuento;
+
+        if (montoDescuento <= 0) {
+            response.setMensaje("La promoción no generó descuento para el monto original o no aplica.");
+            response.setMontoDescuento(0.0);
+            response.setMontoFinal(request.getMontoOriginal());
+            return response;
+        }
+
+        // ----------------------------------------------------------------------
+        // 4. PERSISTENCIA REAL Y ACTUALIZACIÓN DE CONTADORES (PUNTO CRÍTICO)
+        // ----------------------------------------------------------------------
+
+        String tipoDescuento = promocion.getTipoPromocion().name().contains("CUPON") ? "CUPON" : "PROMOCION";
+        Integer usosRestantes = null;
+
+        // A. Lógica Específica para CUPONES (Actualización de Contadores)
+        if ("CUPON".equals(tipoDescuento)) {
+            Optional<Cupon> cuponOpt = cuponRepository.findByCodigo(request.getCodigo());
+
+            if (cuponOpt.isPresent()) {
+                Cupon cupon = cuponOpt.get();
+
+                // Validación de límites de uso del Cupón
+                if (cupon.getUsosActuales() >= cupon.getUsosMaximos()) {
+                    response.setMensaje("Cupón ha alcanzado su límite de usos.");
+                    response.setMontoDescuento(0.0);
+                    response.setMontoFinal(request.getMontoOriginal());
+                    return response; // Se rechaza la operación
+                }
+
+                // Actualizar y guardar el cupón
+                cupon.setUsosActuales(cupon.getUsosActuales() + 1);
+                // Actualizar estado si ya no quedan usos
+                if (cupon.getUsosActuales() >= cupon.getUsosMaximos()) {
+                    cupon.setEstado("FINALIZADO");
+                }
+                cuponRepository.save(cupon); // 🔄 Persistencia 1: Actualiza el contador del Cupón
+
+                // Establecer usos restantes para la respuesta DTO
+                usosRestantes = cupon.getUsosMaximos() - cupon.getUsosActuales();
+            } else {
+                // Caso de error: el código existe como Promoción pero no como Cupón individual
+                response.setMensaje("El código es de cupón, pero el cupón individual no fue encontrado.");
+                response.setMontoDescuento(0.0);
+                response.setMontoFinal(request.getMontoOriginal());
+                return response;
+            }
+        }
+
+        //Persistencia del Registro de Auditoría (Tracking)
+        UsoDescuento nuevoUso = new UsoDescuento();
+        nuevoUso.setTipoDescuento(tipoDescuento);
+        nuevoUso.setDescuentoId(promocion.getId());
+        nuevoUso.setCodigoUsado(request.getCodigo());
+        nuevoUso.setUsuarioId(request.getUsuarioId());
+        nuevoUso.setMontoDescuento(montoDescuento);
+        nuevoUso.setMontoOriginal(request.getMontoOriginal());
+        nuevoUso.setMontoFinal(montoFinal);
+
+        usosDescuentoRepository.save(nuevoUso); //Persistencia
+
+       //----------------------------------------------------------------
+        // **Continuando con la respuesta del DTO de Tracking**
+        response.setTipo(tipoDescuento);
+        response.setValorDescuento(Double.valueOf(promocion.getValorDescuento()));
+        response.setTipoDescuento(promocion.getTipoPromocion().name());
+        response.setMontoDescuento(montoDescuento);
+        response.setMontoFinal(montoFinal);
+        response.setUsosRestantes(usosRestantes);
+        response.setMensaje("Uso registrado y descuento calculado correctamente.");
+        return response;
+    }
+
+// ---------------------------------------------------------------------------------
+
+    /**
+     * Calcula el monto de descuento para fines de tracking, basándose en el monto original.
+     * Este método implementa la lógica que faltaba.
+     */
+    private double calcularMontoDescuentoParaTracking(Promocion promocion, Double montoOriginal) {
+        if (montoOriginal == null || montoOriginal <= 0) {
+            return 0.0;
+        }
+
+        switch (promocion.getTipoPromocion()) {
+            case DESCUENTO_PORCENTAJE:
+                // Asegurarse de que el porcentaje sea válido (e.g., no más de 100)
+                double porcentaje = promocion.getValorDescuento();
+                if (porcentaje > 100) porcentaje = 100;
+                return montoOriginal * (porcentaje / 100);
+
+            case DESCUENTO_MONTO_FIJO:
+                // El descuento no puede ser mayor que el monto original
+                return Math.min(promocion.getValorDescuento(), montoOriginal);
+
+            case ENVIO_GRATIS:
+            case DOS_POR_UNO:
+            case TRES_POR_DOS:
+            case REGALO_PRODUCTO:
+            case CASHBACK:
+                // Estos tipos de promoción no tienen un descuento simple basado en el monto original.
+                // Retorna 0.0 y se asume que la lógica compleja se maneja en el método de Facturación.
+                return 0.0;
+
+            default:
+                return 0.0;
+        }
     }
 
     @Override
@@ -144,6 +375,16 @@ public class PromocionServiceImpl implements PromocionService {
      */
     @Override
     public PromocionesDisponiblesFacturacionResponse obtenerPromocionesParaFacturacion(String account, List<ProductoFactura> productos) {
+        // --- Filtrar productos por STOCK y Estado ---
+        List<ProductoFactura> productosConStock = productos.stream()
+                .filter(this::tieneStockYActivo) //metodo privado
+                .collect(Collectors.toList());
+        // Si despues de filtrar no queda nada, no hay promo aplicables
+        if (productosConStock.isEmpty()){
+            return new PromocionesDisponiblesFacturacionResponse(account, 0.0, Collections.emptyList());
+        }
+        // -----------------------------------------------------------------------------
+
         //Obtener todas las promos activas y vigentes
         List<Promocion> promocionesActivas = promocionRepository.findPromocionesActivasYVigentes(LocalDateTime.now());
 
@@ -365,6 +606,10 @@ public class PromocionServiceImpl implements PromocionService {
         promocion.setFechaFin(dto.getFechaFin());
         promocion.setEsAcumulable(dto.isEsAcumulable());
         promocion.setEstaActiva(dto.isEstaActiva());
+        promocion.setCategoriaId(dto.getCategoriaId()); //nuevo
+        promocion.setProductoId(dto.getProductoId()); //nuevo
+        promocion.setUsosTotales(dto.getUsosTotales()); //nuevo
+        promocion.setUsosMaximos(dto.getUsosMaximos());//nuevo
         return promocion;
     }
 
@@ -386,6 +631,59 @@ public class PromocionServiceImpl implements PromocionService {
         dto.setFechaFin(promocion.getFechaFin());
         dto.setEsAcumulable(promocion.getEsAcumulable());
         dto.setEstaActiva(promocion.getEstaActiva());
+        dto.setCategoriaId(promocion.getCategoriaId());//nuevo
+        dto.setProductoId(promocion.getProductoId()); //nuevo
+        dto.setUsosMaximos(promocion.getUsosMaximos());//nuevo
+        dto.setUsosTotales(promocion.getUsosTotales());//nuevo
         return dto;
     }
+
+    // --- Nuevo método privado para validar Stock con el Feign Client ---
+
+/**
+ * Llama al microservicio de Inventarios para verificar el stock y el estado 'activo' de un producto.
+ * @param productoFactura El DTO de producto de la solicitud de Facturación.
+ * @return true si el producto está activo y tiene suficiente stock, false en caso contrario.
+ */
+private boolean tieneStockYActivo(ProductoFactura productoFactura) {
+    Long productoId = productoFactura.getId();
+
+    if (productoId == null) {
+        System.err.println("⚠️ ProductoFactura sin ID — no se puede consultar en Inventario.");
+        return false;
+    }
+
+    try {
+        ProductoDTO inventarioData = inventarioClient.obtenerProducto(productoId);
+
+        if (inventarioData == null) {
+            System.err.println("❌ InventarioClient devolvió null para producto ID " + productoId);
+            return false;
+        }
+
+        if (Boolean.FALSE.equals(inventarioData.getActivo())) {
+            System.err.println("🔒 Producto ID " + productoId + " no está activo");
+            return false;
+        }
+
+        if (inventarioData.getStockMaximo() == null) {
+            System.err.println("📦 Producto ID " + productoId + " no tiene stockMaximo definido");
+            return false;
+        }
+
+        boolean tieneStock = inventarioData.getStockMaximo() >= productoFactura.getQuantity();
+
+        if (!tieneStock) {
+            System.err.println("⚠️ Producto ID " + productoId + " stock insuficiente. Disponible: "
+                    + inventarioData.getStockMaximo() + ", Requerido: " + productoFactura.getQuantity());
+        }
+
+        return tieneStock;
+
+    } catch (Exception e) {
+        System.err.println("💥 Error al consultar Inventario para ID " + productoId + ": " + e.getMessage());
+        return false;
+    }
+}
+
 }
