@@ -23,7 +23,11 @@ spring:
 inventario:
   url: https://endpoints-production-4a52.up.railway.app/api
 
+usuarios:
+  url: https://accounts.beckysflorist.site
+
 logging:
   level:
     com.componente.promociones.model.dto.integraciones.lealtad.inventario.InventarioClient: DEBUG
+    com.componente.promociones.model.dto.integraciones.lealtad.users.ValidationServiceClient: DEBUG
     feign: DEBUG

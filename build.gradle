@@ -37,7 +37,7 @@ dependencyManagement {
 
 dependencies {
 	// Dependencias custom y starters
-	implementation 'com.github.xsismadn3ss:shared-dtos:v1.0.18'
+	implementation 'com.github.xsismadn3ss:shared-dtos:v1.0.20'
 	implementation 'org.springframework.boot:spring-boot-starter-amqp'
 	implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
 	implementation 'org.springframework.boot:spring-boot-starter-mail'
