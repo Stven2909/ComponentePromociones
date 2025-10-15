@@ -1,6 +1,6 @@
 "use client"
 
-import { PROMOCIONES_URL, CUPONES_URL, STATS_URL } from '@/lib/apiRoutes';
+import { PROMOCIONES_URL, CUPONES_URL, STATS_URL, BASE_URL } from '@/lib/apiRoutes';
 
 import React, { useState, useEffect, use } from 'react';
 import { useToast } from './ui/use-toast';
@@ -74,37 +74,6 @@ import {
 } from "recharts"
 import { LoginWidget } from "./login-widget"
 
-const categoryHierarchy = {
-  Ropa: {
-    Mujer: ["Camisetas", "Pantalones", "Vestidos", "Faldas", "Chaquetas", "Ropa Interior"],
-    Hombre: ["Camisetas", "Pantalones", "Camisas", "Chaquetas", "Ropa Interior", "Trajes"],
-    Niños: ["Bebés", "Niñas", "Niños", "Adolescentes"],
-  },
-  Electrónica: {
-    Computadoras: ["Laptops", "Desktops", "Tablets", "Accesorios"],
-    Teléfonos: ["Smartphones", "Teléfonos Básicos", "Accesorios"],
-    Audio: ["Audífonos", "Bocinas", "Micrófonos", "Equipos de Sonido"],
-    Cámaras: ["DSLR", "Mirrorless", "Compactas", "Accesorios"],
-  },
-  Hogar: {
-    Cocina: ["Electrodomésticos", "Utensilios", "Vajilla", "Almacenamiento"],
-    Dormitorio: ["Ropa de Cama", "Almohadas", "Colchones", "Decoración"],
-    Baño: ["Toallas", "Accesorios", "Organización", "Decoración"],
-    Sala: ["Muebles", "Decoración", "Iluminación", "Textiles"],
-  },
-  Deportes: {
-    Fitness: ["Pesas", "Máquinas", "Yoga", "Cardio"],
-    "Deportes de Equipo": ["Fútbol", "Basketball", "Volleyball", "Baseball"],
-    "Deportes Individuales": ["Tenis", "Golf", "Natación", "Ciclismo"],
-    Outdoor: ["Camping", "Senderismo", "Escalada", "Pesca"],
-  },
-  Belleza: {
-    Maquillaje: ["Rostro", "Ojos", "Labios", "Uñas"],
-    "Cuidado de la Piel": ["Limpiadores", "Hidratantes", "Tratamientos", "Protección Solar"],
-    Cabello: ["Shampoo", "Acondicionador", "Tratamientos", "Styling"],
-    Fragancias: ["Perfumes", "Colonias", "Body Spray", "Aceites"],
-  },
-}
 
 // Al inicio del componente, después de los imports
 interface PromocionBackend {
@@ -164,7 +133,39 @@ export function AdminDashboard() {
   const [couponSearch, setCouponSearch] = useState("")
   const [couponStatusFilter, setCouponStatusFilter] = useState<"all" | "active" | "paused">("all")
 
-  const [dashboardStats, setDashboardStats] = useState({});
+  const [dashboardStats, setDashboardStats] = useState([]);
+
+  //estados para las categorias desde inventario
+  const [categoriasInventario, setCategoriasInventario] = useState<any[]>([]); 
+  const [loadingCategorias, setLoadingCategorias] = useState(false);
+  const [errorCategorias, setErrorCategorias] = useState(null);
+
+  //estados para los productos desde inventario
+  const [productosInventario, setProductosInventario] = useState<ProductoDTO[]>([])
+  const [loadingProductos, setLoadingProductos] = useState(true)
+
+
+  //estado para los datos
+  const [statsData, setStatsData] = useState({
+    promocionesActivas: 0,
+    promocionesTotales: 0,
+    promocionesUsadas: 0,
+    usosTotalesPromociones: 0,
+    montoDescontadoPromociones: 0,
+    cuponesActivos: 0,
+    cuponesTotales: 0,
+    cuponesUtilizados: 0,
+    usosTotalesCupones: 0,
+    montoDescontadoCupones: 0,
+    usosTotales: 0,
+    montoDescontadoTotal: 0,
+    ahorroPromedio: 0,
+    usuariosUnicos: 0,
+    tasaConversion: 0,
+    usosHoy: 0,
+    usosSemana: 0,
+    usosMes: 0, 
+  })
 
 
   const [promociones, setPromociones] = useState<PromocionBackend[]>([])
@@ -177,77 +178,123 @@ export function AdminDashboard() {
  const [loadingStats, setLoadingStats] = useState(true);
  const [errorStats, setErrorStats] = useState<string | null>(null);
 
-  const handleCreatePromotion = async () => {
-    try {
-      // Validar campos requeridos
-      if (!newPromotion.name || !newPromotion.discount || !newPromotion.startDate || !newPromotion.endDate) {
-        toast({
-          title: 'Error',
-          description: 'Por favor completa todos los campos requeridos',
-          variant: 'destructive',
-        })
-        return
-      }
-  
-      // Mapear al formato del backend
-      const payload = {
-        nombre: newPromotion.name,
-        codigo: newPromotion.name.toUpperCase().replace(/\s+/g, '_').substring(0, 20), // Generar código único
-        descripcion: newPromotion.description,
-        tipoPromocion: newPromotion.type === 'percentage' ? 'DESCUENTO_PORCENTAJE' : 'DESCUENTO_MONTO_FIJO',
-        tipoCondicion: 'MONTO_MINIMO',
-        valorDescuento: parseFloat(newPromotion.discount.replace(/[%$]/g, '')),
-        fechaInicio: `${newPromotion.startDate} 00:00:00`,
-        fechaFin: `${newPromotion.endDate} 23:59:59`,
-        esAcumulable: true,
-        estaActiva: true,
-      }
-  
-      const response = await fetch(PROMOCIONES_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-        credentials: 'include',
-      })
-  
-      if (!response.ok) throw new Error('Error al crear promoción')
-  
-      toast({
-        title: 'Éxito',
-        description: 'Promoción creada correctamente',
-      })
-  
-      setIsPromotionDialogOpen(false)
-      setNewPromotion({
-        name: '', discount: '', startDate: '', endDate: '', maxUsage: '',
-        type: 'percentage', description: '', category: '', minPurchase: '',
-      })
-      fetchPromociones() // Recargar lista
-    } catch (error) {
+
+// ==================== FUNCIÓN AUXILIAR ====================
+const formatDate = (date: string, hour: string) => {
+  return date.includes(' ') ? date : `${date} ${hour}`;
+};
+
+// Función para extraer el valor numérico del descuento
+const extractDiscountValue = (discount: string): number => {
+  // Elimina cualquier símbolo de % o $ y convierte a número
+  const cleanValue = discount.replace(/[%$\s]/g, '');
+  return parseFloat(cleanValue) || 0;
+};
+
+// -------------------------------------------------------------------
+
+ const handleCreatePromotion = async () => {
+  try {
+    // Validar campos requeridos
+    if (!newPromotion.name || !newPromotion.discount || !newPromotion.startDate || !newPromotion.endDate) {
       toast({
         title: 'Error',
-        description: error instanceof Error ? error.message : 'No se pudo crear la promoción',
+        description: 'Por favor completa todos los campos requeridos',
         variant: 'destructive',
       })
+      return
     }
+
+    // Mapear al formato del backend
+    const payload = {
+      nombre: newPromotion.name,
+      codigo: newPromotion.name.toUpperCase().replace(/\s+/g, '_').substring(0, 20),
+      descripcion: newPromotion.description,
+      tipoPromocion: newPromotion.type === 'percentage' ? 'DESCUENTO_PORCENTAJE' : 'DESCUENTO_MONTO_FIJO',
+      tipoCondicion: 'MONTO_MINIMO',
+      valorDescuento: extractDiscountValue(newPromotion.discount),
+      fechaInicio: formatDate(newPromotion.startDate, '00:00:00'),
+      fechaFin: formatDate(newPromotion.endDate, '23:59:59'),
+      esAcumulable: true,
+      estaActiva: true,
+      categoriaId: newPromotion.categoriaId,
+      productoId: newPromotion.productoId,
+      usosMaximos: parseInt(newPromotion.maxUsage || '0'), // 👈 aquí lo agregas
+    }
+
+    console.log("📦 Payload CREATE:", payload);
+
+    const response = await fetch(PROMOCIONES_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+      credentials: 'include',
+    })
+
+    if (!response.ok) throw new Error('Error al crear promoción')
+
+    toast({
+      title: 'Éxito',
+      description: 'Promoción creada correctamente',
+    })
+
+    setIsPromotionDialogOpen(false)
+    setNewPromotion({
+      name: '', 
+      discount: '', 
+      startDate: '', 
+      endDate: '', 
+      maxUsage: '',
+      type: 'percentage', 
+      description: '', 
+      category: '', 
+      minPurchase: '',
+      categoriaId: null,
+      productoId: null,
+      usosMaximos: '',
+    })
+    fetchPromociones()
+  } catch (error) {
+    toast({
+      title: 'Error',
+      description: error instanceof Error ? error.message : 'No se pudo crear la promoción',
+      variant: 'destructive',
+    })
   }
+}
 
   const handleEditPromotion = async () => {
-    if (!editingPromotion) return
+    if (!editingPromotion) {
+      console.log("❌ No hay promoción para editar");
+      return;
+    }
+  
+    console.log("✅ Editando promoción:", editingPromotion);
   
     try {
+      console.log("💸 Raw discount:", editingPromotion.discount);
+      
+      // Extraer valor numérico del descuento
+      const discountValue = extractDiscountValue(editingPromotion.discount);
+      console.log("💰 Discount value parsed:", discountValue);
+  
       const payload = {
         nombre: editingPromotion.name,
-        codigo: editingPromotion.name.toUpperCase().replace(/\s+/g, '_').substring(0, 20),
+        codigo: editingPromotion.codigo || editingPromotion.name.toUpperCase().replace(/\s+/g, '_').substring(0, 20),
         descripcion: editingPromotion.description,
         tipoPromocion: editingPromotion.type === 'percentage' ? 'DESCUENTO_PORCENTAJE' : 'DESCUENTO_MONTO_FIJO',
         tipoCondicion: 'MONTO_MINIMO',
-        valorDescuento: parseFloat(editingPromotion.discount.replace(/[%$]/g, '')),
-        fechaInicio: `${editingPromotion.startDate} 00:00:00`,
-        fechaFin: `${editingPromotion.endDate} 23:59:59`,
+        valorDescuento: discountValue,
+        fechaInicio: formatDate(editingPromotion.startDate, '00:00:00'),
+        fechaFin: formatDate(editingPromotion.endDate, '23:59:59'),
         esAcumulable: true,
         estaActiva: editingPromotion.status === 'active',
+        categoriaId: editingPromotion.categoriaId,
+        productoId: editingPromotion.productoId,
+        usosMaximos: parseInt(editingPromotion.maxUsage?.toString() || '0'), // 👈 aquí lo agregas
       }
+  
+      console.log("📦 Payload EDIT:", payload);
   
       const response = await fetch(`${PROMOCIONES_URL}/${editingPromotion.id}`, {
         method: 'PUT',
@@ -255,15 +302,22 @@ export function AdminDashboard() {
         body: JSON.stringify(payload),
         credentials: 'include',
       })
-      if (!response.ok) throw new Error('Error al actualizar promoción')
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || 'Error al actualizar promoción');
+      }
+      
       toast({
         title: 'Éxito',
         description: 'Promoción actualizada correctamente',
       });
+      
       setEditingPromotion(null)
       setIsPromotionDialogOpen(false)
-      fetchPromociones() // Recargar lista
+      fetchPromociones()
     } catch (error) {
+      console.error("❌ Error en handleEditPromotion:", error);
       toast({
         title: 'Error',
         description: error instanceof Error ? error.message : 'No se pudo actualizar la promoción',
@@ -300,19 +354,42 @@ export function AdminDashboard() {
 };
 
 const handleTogglePromotionStatus = async (id: number) => {
+  console.log(`--- [TOGGLE] 🟢 Iniciando cambio de estado para ID: ${id}`);
+  
   // 1. Encontrar la promoción actual y determinar el nuevo estado
   const promoToToggle = promociones.find((p) => p.id === id);
-  if (!promoToToggle) return;
+  if (!promoToToggle) {
+      console.error(`--- [TOGGLE FAIL] 🔴 No se encontró la promoción con ID: ${id} en el estado actual.`);
+      return;
+  }
 
   // 2. Determinar si el nuevo estado es ACTIVO o INACTIVO (lo opuesto al actual)
-  const newStatus = promoToToggle.estaActiva ? false : true; 
+  const newStatus = !promoToToggle.estaActiva; 
+  console.log(`--- [TOGGLE INFO] Estado actual (estaActiva): ${promoToToggle.estaActiva}. Nuevo estado a enviar: ${newStatus}`);
   
   try {
-      // Creamos un payload similar al de 'handleEditPromotion'
+      // 3. Crear el payload de mapeo seguro para el backend (PUT)
       const payload = {
-          ...promoToToggle, // Usamos los datos actuales
-          estaActiva: newStatus, // Solo cambiamos el estado
+          // Mapeamos las propiedades del frontend (que vienen de fetchPromociones) de vuelta al formato del backend:
+          // Asegúrate de usar la propiedad correcta de promoToToggle a la derecha:
+          nombre: promoToToggle.name || promoToToggle.nombre || "", 
+          codigo: promoToToggle.codigo ?? "", // Usar 'codigo' o "" (cadena vacía) si es null/undefined
+          descripcion: promoToToggle.description || promoToToggle.descripcion || "",
+          tipoPromocion: promoToToggle.type || "DESCUENTO_PORCENTAJE", 
+          tipoCondicion: promoToToggle.condition || "SIN_CONDICION",
+          
+          // CRÍTICO: Aseguramos el valor numérico
+          valorDescuento: parseFloat(String(promoToToggle.discount || 0.01)),
+          
+          fechaInicio: promoToToggle.startDate || "",
+          fechaFin: promoToToggle.endDate || "",
+          esAcumulable: promoToToggle.stackable || false,
+          
+          // EL ÚNICO CAMBIO:
+          estaActiva: newStatus, 
       };
+      
+      console.log('--- [TOGGLE PAYLOAD] 📥 Enviando al servidor:', payload);
 
       const response = await fetch(`${PROMOCIONES_URL}/${id}`, {
           method: 'PUT',
@@ -321,17 +398,27 @@ const handleTogglePromotionStatus = async (id: number) => {
           credentials: 'include',
       });
 
-      if (!response.ok) throw new Error('Error al cambiar el estado de la promoción');
+      // 4. Verificar la respuesta del servidor
+      if (!response.ok) {
+          const errorText = await response.text();
+          console.error(`--- [TOGGLE ERROR] 💥 Respuesta del servidor: ${response.status}`, errorText);
+          throw new Error('Error al cambiar el estado de la promoción');
+      }
       
+      console.log('--- [TOGGLE SUCCESS] ✅ Estado actualizado en el backend. Código 200/204.');
+
       toast({
           title: 'Éxito',
           description: `Promoción ${newStatus ? 'activada' : 'pausada'} correctamente.`,
       });
 
-      // 3. Recargar la lista para mostrar el nuevo estado
+      // 5. Recargar la lista para mostrar el nuevo estado
       fetchPromociones();
+      console.log('--- [TOGGLE COMPLETE] Lista de promociones recargada.');
+      setPromotionStatusFilter("all"); // Reset filter to show all promotions
 
   } catch (error) {
+      console.error('--- [TOGGLE CATCH] 🚫 Fallo en la operación:', error);
       toast({
           title: 'Error',
           description: error instanceof Error ? error.message : 'No se pudo cambiar el estado',
@@ -483,22 +570,22 @@ const monthlyRevenueData = meses.map((mes, i) => {
 
   const filteredPromotions = promociones.filter((promocion) => {
     const matchesSearch =
-      (promocion.nombre || "").toLowerCase().includes(promotionSearch.toLowerCase()) ||
-      (promocion.descripcion || "").toLowerCase().includes(promotionSearch.toLowerCase()) ||
-      (promocion.codigo || "").toLowerCase().includes(promotionSearch.toLowerCase()) ||
-      String(promocion.valorDescuento || "").toLowerCase().includes(promotionSearch.toLowerCase());
+      (promocion.name || "").toLowerCase().includes(promotionSearch.toLowerCase()) ||
+      (promocion.description || "").toLowerCase().includes(promotionSearch.toLowerCase()) ||
+      (promocion.code || "").toLowerCase().includes(promotionSearch.toLowerCase()) ||
+      String(promocion.discount || "").toLowerCase().includes(promotionSearch.toLowerCase());
   
     const matchesStatus =
       promotionStatusFilter === "all" ||
-      (promocion.estaActiva ? "activa" : "inactiva") === promotionStatusFilter;
+      promocion.status === promotionStatusFilter;
   
     return matchesSearch && matchesStatus;
   });
   
   const filteredCoupons = cupones.filter((cupon) => {
     const matchesSearch =
-      (cupon.codigo || "").toLowerCase().includes(couponSearch.toLowerCase()) ||
-      (cupon.descripcion || "").toLowerCase().includes(couponSearch.toLowerCase()) ||
+      (cupon.code || "").toLowerCase().includes(couponSearch.toLowerCase()) ||
+      (cupon.description || "").toLowerCase().includes(couponSearch.toLowerCase()) ||
       String(cupon.promocionId || "").toLowerCase().includes(couponSearch.toLowerCase());
   
     const matchesStatus =
@@ -529,6 +616,7 @@ const monthlyRevenueData = meses.map((mes, i) => {
     esAcumulable: false,
     estaActiva: true,  
     maxUsage: "",
+    categoriaId: null as number | null,
   })
 
   const [newCoupon, setNewCoupon] = useState({
@@ -547,8 +635,8 @@ const monthlyRevenueData = meses.map((mes, i) => {
 
   const { toast } = useToast()
 
-// ==================== FUNCIONES DE FETCH ====================
-// Función para fetch de promociones activas desde el backend
+  //========Funciones FETCH=============================
+
 const fetchPromociones = async () => {
   console.log('--- [FETCH] Iniciando fetchPromociones...');
   try {
@@ -567,24 +655,29 @@ const fetchPromociones = async () => {
     const data = await response.json();
     console.log('--- [FETCH Promociones OK] Promociones cargadas:', data.length);
 
-    // 🧠 Mapear los datos del backend al formato que usa el frontend
     const formattedPromos = data.map((promo: any) => ({
       id: promo.id,
-      name: promo.nombre, // antes "nombre"
-      description: promo.descripcion, // antes "descripcion"
-      type: promo.tipoPromocion,
+      codigo: promo.codigo || "",
+      name: promo.nombre,
+      productoId: promo.productoId || null,
+      description: promo.descripcion,
+      type: promo.tipoPromocion === 'DESCUENTO_PORCENTAJE' ? 'percentage' : 'fixed',
       condition: promo.tipoCondicion,
-      discount: promo.valorDescuento,
-      startDate: promo.fechaInicio,
-      endDate: promo.fechaFin,
+      // Asegurar que el descuento siempre tenga el formato correcto
+      discount: `${promo.valorDescuento}${promo.tipoPromocion === 'DESCUENTO_PORCENTAJE' ? '%' : '$'}`,
+      startDate: promo.fechaInicio?.split(' ')[0] || promo.fechaInicio,
+      endDate: promo.fechaFin?.split(' ')[0] || promo.fechaFin,
       stackable: promo.esAcumulable,
-      status: promo.estaActiva ? "active" : "paused", // antes "estaActiva"
-      usage: promo.usos || 0,
-      maxUsage: promo.maxUsage || 0,
+      estaActiva: !!promo.estaActiva,
+      status: promo.estaActiva ? "active" : "paused",
+      usage: promo.usosTotales || 0,
+      maxUsage: promo.usosMaximos || 0,
+      minPurchase: 0,
+      categoriaId: promo.categoriaId || null,
     }));
 
     setPromociones(formattedPromos);
-    return formattedPromos; // Retornar data formateada para fetchCupones
+    return formattedPromos;
   } catch (error) {
     console.error('Error fetching promociones:', error);
     toast({
@@ -598,8 +691,6 @@ const fetchPromociones = async () => {
     return [];
   }
 };
-
-
 // Función para fetch de cupones activos desde el backend
 const fetchCupones = async (promocionesData: PromocionBackend[] = promociones) => {
   try {
@@ -669,6 +760,9 @@ const fetchDashboardStats = async () => {
     const data = await response.json();
     console.log('--- [FETCH Stats OK] Estadísticas recibidas.');
 
+    //guardar los datos para mostrarlos
+    setStatsData(data);
+
 // Formatear las stats para la UI
  const formattedStats = [
 {
@@ -693,19 +787,22 @@ const fetchDashboardStats = async () => {
  icon: Copy,
  },
  {
- title: 'Campañas en Curso',
- value: '8',
- change: '+5.1%',
- changeType: 'positive',
- icon: Calendar,
- },
- {
- title: 'Conversión Total',
- value: '23.4%',
- change: '+1.2%',
- changeType: 'positive',
- icon: TrendingUp,
- },
+  title: 'Usos Totales',
+  value: data?.usosTotales?.toString() ?? '0',
+  change: '+5.1%',
+  changeType: 'positive',
+  icon: Calendar,
+}, 
+{
+  title: 'Conversión Total',
+  value: data?.tasaConversion 
+    ? `${data.tasaConversion.toFixed(2)}%` 
+    : '0%',
+  change: data?.tasaConversion && data.tasaConversion > 0 ? '+1.2%' : '0%',
+  changeType: data?.tasaConversion && data.tasaConversion > 0 ? 'positive' : 'neutral',
+  icon: TrendingUp,
+},
+
  ];
 
  setDashboardStats(formattedStats);
@@ -716,6 +813,52 @@ const fetchDashboardStats = async () => {
  setLoadingStats(false);
  }
  };
+
+ //Funcion de Fetch para traer las categorias desde inventario
+const fetchCategoriasInventario = async () => {
+  try {
+    setLoadingCategorias(true)
+    const CATEGORIAS_INVENTARIO_URL = `${BASE_URL}/api/promociones/integracion/inventario/categorias`;
+
+    const response = await fetch(CATEGORIAS_INVENTARIO_URL, {
+    method: 'GET',
+      credentials: 'include',
+    })
+    
+    if (!response.ok) throw new Error('Error al cargar categorías')
+    
+    const data = await response.json()
+    console.log('Categorías de Inventario:', data)
+    setCategoriasInventario(data)
+  } catch (error) {
+    console.error('Error fetching categorías:', error)
+    toast({
+      title: 'Error',
+      description: 'No se pudieron cargar las categorías de inventario',
+      variant: 'destructive',
+    })
+  } finally {
+    setLoadingCategorias(false)
+  }
+}
+//Funcion de Fetch para traer los productos desde inventario
+const PRODUCTOS_URL = `${BASE_URL}/api/promociones/integracion/inventario/productos`;
+
+const fetchProductos = async () => {
+  try {
+    const res = await fetch(PRODUCTOS_URL, {
+      method: 'GET',
+      credentials: 'include',
+    })
+    const data = await res.json()
+    setProductosInventario(data)
+  } catch (error) {
+    console.error("💥 Error al cargar productos desde inventario:", error)
+  } finally {
+    setLoadingProductos(false)
+  }
+}
+
 
  // ==================== ORQUESTACIÓN DE CARGA INICIAL ====================
  useEffect(() => {
@@ -730,8 +873,14 @@ const fetchDashboardStats = async () => {
       // 2️⃣ Luego, cargar cupones usando las promociones ya disponibles
       await fetchCupones(promocionesData);
       
-      // 3️⃣ Finalmente, cargar estadísticas del dashboard
+      // 3️⃣ cargar estadísticas del dashboard
       await fetchDashboardStats();
+
+      // Cargar categorias de inventario para el formulario
+      await fetchCategoriasInventario();
+
+      // Cargar productos de inventario para el formulario
+      await fetchProductos();
 
       console.log('--- [EFFECT OK] Datos iniciales cargados correctamente.');
     } catch (err) {
@@ -825,12 +974,14 @@ const fetchDashboardStats = async () => {
                         </Tooltip>
                       </TooltipProvider>
                     </div>
+
+                    {/* Valor dinamico */}
                     <p className="text-3xl font-bold text-purple-600">
-                      {promociones.reduce((acc, p) => acc + p.usage, 0) + cupones.reduce((acc, c) => acc + c.usage, 0)}
+                      {statsData?.usosTotales ?? 0}
                     </p>
+
                     <p className="text-xs text-gray-500 mt-1">
-                      {promociones.reduce((acc, p) => acc + p.maxUsage, 0) +
-                        cupones.reduce((acc, c) => acc + c.maxUsage, 0)}{" "}
+                      {statsData?.usosTotalesPromociones + statsData?.usosTotalesCupones || 0} usos de promociones y cupones
                       disponibles
                     </p>
                   </div>
@@ -954,552 +1105,650 @@ const fetchDashboardStats = async () => {
           </div>
         )
 
-      case "promociones":
-        return (
-          <div className="space-y-6">
-            <div className="flex justify-between items-center">
-              <h2 className="text-3xl font-bold text-gray-800">Promociones</h2>
-              <Dialog open={isPromotionDialogOpen} onOpenChange={setIsPromotionDialogOpen}>
-                <DialogTrigger asChild>
-                  <Button
-                    className="bg-purple-600 hover:bg-purple-700"
-                    onClick={() => {
-                      setEditingPromotion(null)
-                      setSelectedMainCategory("")
-                      setSelectedSubCategory("")
-                      setSelectedSubSubCategory("")
-                    }}
-                  >
-                    <Plus className="mr-2 h-4 w-4" /> Nueva Promoción
-                  </Button>
-                </DialogTrigger>
-                <DialogContent className="bg-white max-w-2xl max-h-[90vh] overflow-y-auto">
-                  <DialogHeader>
-                    <DialogTitle>{editingPromotion ? "Editar Promoción" : "Crear Nueva Promoción"}</DialogTitle>
-                  </DialogHeader>
-                  <div className="space-y-4">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <div className="flex items-center gap-2 mb-2">
-                          <Label htmlFor="name">Nombre de la Promoción</Label>
-                          <TooltipProvider>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <button className="text-purple-600 hover:text-purple-700">
-                                  <HelpCircle className="h-3 w-3" />
-                                </button>
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                <p className="text-sm">Nombre descriptivo para identificar la promoción</p>
-                              </TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
-                        </div>
-                        <Input
-                          id="name"
-                          placeholder="Ej: Descuento de Verano"
-                          value={editingPromotion ? editingPromotion.name : newPromotion.name}
-                          onChange={(e) =>
-                            editingPromotion
-                              ? setEditingPromotion({ ...editingPromotion, name: e.target.value })
-                              : setNewPromotion({ ...newPromotion, name: e.target.value })
-                          }
-                        />
-                      </div>
+case "promociones":
+  console.log("🔎 Datos de promociones:", filteredPromotions);
+  console.log("🔎 Categorías:", categoriasInventario);
+  console.log("🔎 Productos:", productosInventario);
+  return (
+    <div className="space-y-6">
+      <div className="flex justify-between items-center">
+        <h2 className="text-3xl font-bold text-gray-800">Promociones</h2>
+        <Dialog open={isPromotionDialogOpen} onOpenChange={setIsPromotionDialogOpen}>
+          <DialogTrigger asChild>
+            <Button
+              className="bg-purple-600 hover:bg-purple-700"
+              onClick={() => {
+                console.log("🆕 Abriendo diálogo para NUEVA promoción");
+                setEditingPromotion(null); // Limpiar cualquier promoción en edición
+                setNewPromotion({
+                  name: '', 
+                  discount: '', 
+                  startDate: '', 
+                  endDate: '', 
+                  maxUsage: '',
+                  usage: 0,
+                  type: 'percentage', 
+                  description: '', 
+                  category: '', 
+                  minPurchase: '',
+                  categoriaId: null,
+                  productoId: null,
+                });
+              }}
+            >
+              <Plus className="mr-2 h-4 w-4" /> Nueva Promoción
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="bg-white max-w-2xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>
+                {editingPromotion ? "Editar Promoción" : "Crear Nueva Promoción"}
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <div className="flex items-center gap-2 mb-2">
+                    <Label htmlFor="name">Nombre de la Promoción</Label>
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <button className="text-purple-600 hover:text-purple-700">
+                            <HelpCircle className="h-3 w-3" />
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p className="text-sm">Nombre descriptivo para identificar la promoción</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </div>
+                  <Input
+                    id="name"
+                    placeholder="Ej: Descuento de Verano"
+                    value={editingPromotion ? editingPromotion.name : newPromotion.name}
+                    onChange={(e) =>
+                      editingPromotion
+                        ? setEditingPromotion({ ...editingPromotion, name: e.target.value })
+                        : setNewPromotion({ ...newPromotion, name: e.target.value })
+                    }
+                  />
+                </div>
 
-                      <div>
-                        <div className="flex items-center gap-2 mb-2">
-                          <Label htmlFor="mainCategory">Categoría Principal</Label>
-                          <TooltipProvider>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <button className="text-purple-600 hover:text-purple-700">
-                                  <HelpCircle className="h-3 w-3" />
-                                </button>
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                <p className="text-sm">
-                                  Selecciona la categoría principal de productos para esta promoción
-                                </p>
-                              </TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
-                        </div>
-                        <Select
-                          value={selectedMainCategory}
-                          onValueChange={(value) => {
-                            setSelectedMainCategory(value)
-                            setSelectedSubCategory("")
-                            setSelectedSubSubCategory("")
-                            const fullCategory = value
-                            if (editingPromotion) {
-                              setEditingPromotion({ ...editingPromotion, category: fullCategory })
-                            } else {
-                              setNewPromotion({ ...newPromotion, category: fullCategory })
-                            }
-                          }}
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Seleccionar categoría principal" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {Object.keys(categoryHierarchy).map((cat) => (
-                              <SelectItem key={cat} value={cat}>
-                                {cat}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </div>
+                      
+  <div className="flex items-center gap-2 mb-2">
+    <Label htmlFor="categoria">Categoría del Producto</Label>
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button className="text-purple-600 hover:text-purple-700">
+            <HelpCircle className="h-3 w-3" />
+          </button>
+        </TooltipTrigger>
+        <TooltipContent>
+          <p className="text-sm">
+            Selecciona la categoría de productos de Inventario para esta promoción
+          </p>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  </div>
+  
+  {loadingCategorias ? (
+    <div className="text-sm text-gray-500">Cargando categorías...</div>
+  ) : (
+    <Select
+      value={
+        editingPromotion?.categoriaId?.toString() || 
+        newPromotion.categoriaId?.toString() || 
+        "none"
+      }
+      onValueChange={(value) => {
+        const categoriaId = value !== "none" ? parseInt(value) : null
+        if (editingPromotion) {
+          setEditingPromotion({ ...editingPromotion, categoriaId })
+        } else {
+          setNewPromotion({ ...newPromotion, categoriaId })
+        }
+      }}
+    >
+      <SelectTrigger>
+        <SelectValue placeholder="Seleccionar categoría de inventario" />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value="none">Sin categoría específica</SelectItem>
+        {categoriasInventario.map((categoria) => (
+          <SelectItem key={categoria.categoriaId} value={categoria.categoriaId.toString()}>
+            {categoria.nombre}
+            {categoria.descripcion && (
+              <span className="text-xs text-gray-500 ml-2">
+                - {categoria.descripcion}
+              </span>
+            )}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  )}
+  
+  {/* Mostrar categoría seleccionada */}
+  {(newPromotion.categoriaId || editingPromotion?.categoriaId) && (
+    <div className="mt-2 p-2 bg-purple-50 rounded border border-purple-200">
+      <p className="text-xs text-gray-600">Categoría seleccionada:</p>
+      <p className="text-sm font-medium text-purple-700">
+        {categoriasInventario.find(
+          c => c.categoriaId === (editingPromotion?.categoriaId || newPromotion.categoriaId)
+        )?.nombre || 'Cargando...'}
+      </p>
+    </div>
+  )}
+</div>
 
-                    {selectedMainCategory && (
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <Label htmlFor="subCategory">Subcategoría</Label>
-                          <Select
-                            value={selectedSubCategory}
-                            onValueChange={(value) => {
-                              setSelectedSubCategory(value)
-                              setSelectedSubSubCategory("")
-                              const fullCategory = `${selectedMainCategory} > ${value}`
-                              if (editingPromotion) {
-                                setEditingPromotion({ ...editingPromotion, category: fullCategory })
-                              } else {
-                                setNewPromotion({ ...newPromotion, category: fullCategory })
-                              }
-                            }}
-                          >
-                            <SelectTrigger>
-                              <SelectValue placeholder="Seleccionar subcategoría" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {Object.keys(
-                                categoryHierarchy[selectedMainCategory as keyof typeof categoryHierarchy],
-                              ).map((subCat) => (
-                                <SelectItem key={subCat} value={subCat}>
-                                  {subCat}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
+<div>
+  <div className="flex items-center gap-2 mb-2">
+    <Label htmlFor="producto">Producto específico</Label>
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button className="text-purple-600 hover:text-purple-700">
+            <HelpCircle className="h-3 w-3" />
+          </button>
+        </TooltipTrigger>
+        <TooltipContent>
+          <p className="text-sm">
+            Selecciona un producto específico para esta promoción (opcional)
+          </p>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  </div>
+  {loadingProductos ? (
+    <div className="text-sm text-gray-500">Cargando productos...</div>
+  ) : (
+    <Select
+      value={
+        editingPromotion?.productoId?.toString() || 
+        newPromotion.productoId?.toString() || 
+        "none"
+      }
+      onValueChange={(value) => {
+        const productoId = value !== "none" ? parseInt(value) : null
+        if (editingPromotion) {
+          setEditingPromotion({ ...editingPromotion, productoId })
+        } else {
+          setNewPromotion({ ...newPromotion, productoId })
+        }
+      }}
+    >
+      <SelectTrigger>
+        <SelectValue placeholder="Seleccionar producto (opcional)" />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value="none">Sin producto específico</SelectItem>
+        {productosInventario.map((producto) => (
+          <SelectItem key={producto.productoId} value={producto.productoId.toString()}>
+            {producto.nombre}
+            {producto.descripcion && (
+              <span className="text-xs text-gray-500 ml-2">
+                - {producto.descripcion}
+              </span>
+            )}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  )}
+  
+  {/* Mostrar producto seleccionado */}
+  {(newPromotion.productoId || editingPromotion?.productoId) && (
+    <div className="mt-2 p-2 bg-green-50 rounded border border-green-200">
+      <p className="text-xs text-gray-600">Producto seleccionado:</p>
+      <p className="text-sm font-medium text-green-700">
+        {productosInventario.find(
+          p => p.productoId === (editingPromotion?.productoId || newPromotion.productoId)
+        )?.nombre || 'Cargando...'}
+      </p>
+    </div>
+  )}
+</div>
 
-                        {selectedSubCategory && (
-                          <div>
-                            <Label htmlFor="subSubCategory">Categoría Específica</Label>
-                            <Select
-                              value={selectedSubSubCategory}
-                              onValueChange={(value) => {
-                                setSelectedSubSubCategory(value)
-                                const fullCategory = `${selectedMainCategory} > ${selectedSubCategory} > ${value}`
-                                if (editingPromotion) {
-                                  setEditingPromotion({ ...editingPromotion, category: fullCategory })
-                                } else {
-                                  setNewPromotion({ ...newPromotion, category: fullCategory })
-                                }
-                              }}
-                            >
-                              <SelectTrigger>
-                                <SelectValue placeholder="Seleccionar categoría específica" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {categoryHierarchy[selectedMainCategory as keyof typeof categoryHierarchy][
-                                  selectedSubCategory as keyof (typeof categoryHierarchy)[keyof typeof categoryHierarchy]
-                                ].map((subSubCat: string) => (
-                                  <SelectItem key={subSubCat} value={subSubCat}>
-                                    {subSubCat}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </div>
-                        )}
-                      </div>
-                    )}
+<div>
+  <div className="flex items-center gap-2 mb-2">
+    <Label htmlFor="description">Descripción</Label>
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button className="text-purple-600 hover:text-purple-700">
+            <HelpCircle className="h-3 w-3" />
+          </button>
+        </TooltipTrigger>
+        <TooltipContent>
+          <p className="text-sm">Detalles adicionales sobre la promoción y sus condiciones</p>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  </div>
+  <Textarea
+    id="description"
+    placeholder="Describe los detalles de la promoción..."
+    value={editingPromotion ? editingPromotion.description : newPromotion.description}
+    onChange={(e) =>
+      editingPromotion
+        ? setEditingPromotion({ ...editingPromotion, description: e.target.value })
+        : setNewPromotion({ ...newPromotion, description: e.target.value })
+    }
+  />
+</div>
 
-                    {(selectedMainCategory || (editingPromotion && editingPromotion.category)) && (
-                      <div className="p-3 bg-purple-50 rounded-lg border border-purple-200">
-                        <p className="text-sm text-gray-600">Categoría seleccionada:</p>
-                        <p className="font-semibold text-purple-700">
-                          {editingPromotion ? editingPromotion.category : newPromotion.category}
-                        </p>
-                      </div>
-                    )}
+<div className="grid grid-cols-3 gap-4">
+  <div>
+    <div className="flex items-center gap-2 mb-2">
+      <Label htmlFor="type">Tipo de Descuento</Label>
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button className="text-purple-600 hover:text-purple-700">
+              <HelpCircle className="h-3 w-3" />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent>
+            <p className="text-sm">Porcentaje (%) o monto fijo ($) de descuento</p>
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    </div>
+    <Select
+      value={editingPromotion ? editingPromotion.type : newPromotion.type}
+      onValueChange={(value: "percentage" | "fixed") =>
+        editingPromotion
+          ? setEditingPromotion({ ...editingPromotion, type: value })
+          : setNewPromotion({ ...newPromotion, type: value })
+      }
+    >
+      <SelectTrigger>
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value="percentage">Porcentaje (%)</SelectItem>
+        <SelectItem value="fixed">Monto Fijo ($)</SelectItem>
+      </SelectContent>
+    </Select>
+  </div>
+  <div>
+    <div className="flex items-center gap-2 mb-2">
+      <Label htmlFor="discount">Descuento</Label>
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button className="text-purple-600 hover:text-purple-700">
+              <HelpCircle className="h-3 w-3" />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent>
+            <p className="text-sm">Valor del descuento (ej: 20% o $50)</p>
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    </div>
+    <Input
+      id="discount"
+      placeholder="Ej: 20% o $50"
+      value={editingPromotion ? editingPromotion.discount : newPromotion.discount}
+      onChange={(e) =>
+        editingPromotion
+          ? setEditingPromotion({ ...editingPromotion, discount: e.target.value })
+          : setNewPromotion({ ...newPromotion, discount: e.target.value })
+      }
+    />
+  </div>
+  <div>
+    <div className="flex items-center gap-2 mb-2">
+      <Label htmlFor="minPurchase">Compra Mínima ($)</Label>
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button className="text-purple-600 hover:text-purple-700">
+              <HelpCircle className="h-3 w-3" />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent>
+            <p className="text-sm">Monto mínimo de compra requerido para aplicar la promoción</p>
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    </div>
+    <Input
+      id="minPurchase"
+      type="number"
+      placeholder="0"
+      value={editingPromotion ? editingPromotion.minPurchase : newPromotion.minPurchase}
+      onChange={(e) =>
+        editingPromotion
+          ? setEditingPromotion({
+              ...editingPromotion,
+              minPurchase: e.target.value,
+            })
+          : setNewPromotion({ ...newPromotion, minPurchase: e.target.value })
+      }
+    />
+  </div>
+</div>
 
-                    <div>
-                      <div className="flex items-center gap-2 mb-2">
-                        <Label htmlFor="description">Descripción</Label>
-                        <TooltipProvider>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <button className="text-purple-600 hover:text-purple-700">
-                                <HelpCircle className="h-3 w-3" />
-                              </button>
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              <p className="text-sm">Detalles adicionales sobre la promoción y sus condiciones</p>
-                            </TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
-                      </div>
-                      <Textarea
-                        id="description"
-                        placeholder="Describe los detalles de la promoción..."
-                        value={editingPromotion ? editingPromotion.description : newPromotion.description}
-                        onChange={(e) =>
-                          editingPromotion
-                            ? setEditingPromotion({ ...editingPromotion, description: e.target.value })
-                            : setNewPromotion({ ...newPromotion, description: e.target.value })
-                        }
-                      />
-                    </div>
+<div className="grid grid-cols-2 gap-4">
+  <div>
+    <div className="flex items-center gap-2 mb-2">
+      <Label htmlFor="startDate">Fecha de Inicio</Label>
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button className="text-purple-600 hover:text-purple-700">
+              <HelpCircle className="h-3 w-3" />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent>
+            <p className="text-sm">Fecha en que la promoción estará disponible</p>
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    </div>
+    <Input
+      id="startDate"
+      type="date"
+      value={editingPromotion ? editingPromotion.startDate : newPromotion.startDate}
+      onChange={(e) =>
+        editingPromotion
+          ? setEditingPromotion({ ...editingPromotion, startDate: e.target.value })
+          : setNewPromotion({ ...newPromotion, startDate: e.target.value })
+      }
+    />
+  </div>
+  <div>
+    <div className="flex items-center gap-2 mb-2">
+      <Label htmlFor="endDate">Fecha de Fin</Label>
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button className="text-purple-600 hover:text-purple-700">
+              <HelpCircle className="h-3 w-3" />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent>
+            <p className="text-sm">Fecha en que la promoción expirará</p>
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    </div>
+    <Input
+      id="endDate"
+      type="date"
+      value={editingPromotion ? editingPromotion.endDate : newPromotion.endDate}
+      onChange={(e) =>
+        editingPromotion
+          ? setEditingPromotion({ ...editingPromotion, endDate: e.target.value })
+          : setNewPromotion({ ...newPromotion, endDate: e.target.value })
+      }
+    />
+  </div>
+</div>
 
-                    <div className="grid grid-cols-3 gap-4">
-                      <div>
-                        <div className="flex items-center gap-2 mb-2">
-                          <Label htmlFor="type">Tipo de Descuento</Label>
-                          <TooltipProvider>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <button className="text-purple-600 hover:text-purple-700">
-                                  <HelpCircle className="h-3 w-3" />
-                                </button>
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                <p className="text-sm">Porcentaje (%) o monto fijo ($) de descuento</p>
-                              </TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
-                        </div>
-                        <Select
-                          value={editingPromotion ? editingPromotion.type : newPromotion.type}
-                          onValueChange={(value: "percentage" | "fixed") =>
-                            editingPromotion
-                              ? setEditingPromotion({ ...editingPromotion, type: value })
-                              : setNewPromotion({ ...newPromotion, type: value })
-                          }
-                        >
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="percentage">Porcentaje (%)</SelectItem>
-                            <SelectItem value="fixed">Monto Fijo ($)</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-2 mb-2">
-                          <Label htmlFor="discount">Descuento</Label>
-                          <TooltipProvider>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <button className="text-purple-600 hover:text-purple-700">
-                                  <HelpCircle className="h-3 w-3" />
-                                </button>
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                <p className="text-sm">Valor del descuento (ej: 20% o $50)</p>
-                              </TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
-                        </div>
-                        <Input
-                          id="discount"
-                          placeholder="Ej: 20% o $50"
-                          value={editingPromotion ? editingPromotion.discount : newPromotion.discount}
-                          onChange={(e) =>
-                            editingPromotion
-                              ? setEditingPromotion({ ...editingPromotion, discount: e.target.value })
-                              : setNewPromotion({ ...newPromotion, discount: e.target.value })
-                          }
-                        />
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-2 mb-2">
-                          <Label htmlFor="minPurchase">Compra Mínima ($)</Label>
-                          <TooltipProvider>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <button className="text-purple-600 hover:text-purple-700">
-                                  <HelpCircle className="h-3 w-3" />
-                                </button>
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                <p className="text-sm">Monto mínimo de compra requerido para aplicar la promoción</p>
-                              </TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
-                        </div>
-                        <Input
-                          id="minPurchase"
-                          type="number"
-                          placeholder="0"
-                          value={editingPromotion ? editingPromotion.minPurchase : newPromotion.minPurchase}
-                          onChange={(e) =>
-                            editingPromotion
-                              ? setEditingPromotion({
-                                  ...editingPromotion,
-                                  minPurchase: Number.parseInt(e.target.value),
-                                })
-                              : setNewPromotion({ ...newPromotion, minPurchase: e.target.value })
-                          }
-                        />
-                      </div>
-                    </div>
+<div>
+  <div className="flex items-center gap-2 mb-2">
+    <Label htmlFor="maxUsage">Usos Máximos</Label>
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button className="text-purple-600 hover:text-purple-700">
+            <HelpCircle className="h-3 w-3" />
+          </button>
+        </TooltipTrigger>
+        <TooltipContent>
+          <p className="text-sm">Número máximo de veces que se puede usar esta promoción</p>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  </div>
+  <Input
+    id="maxUsage"
+    type="number"
+    placeholder="Ej: 500"
+    value={editingPromotion ? editingPromotion.maxUsage : newPromotion.maxUsage}
+    onChange={(e) =>
+      editingPromotion
+        ? setEditingPromotion({ 
+            ...editingPromotion, 
+            maxUsage: e.target.value 
+          })
+        : setNewPromotion({ ...newPromotion, maxUsage: e.target.value })
+    }
+  />
+</div>
 
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <div className="flex items-center gap-2 mb-2">
-                          <Label htmlFor="startDate">Fecha de Inicio</Label>
-                          <TooltipProvider>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <button className="text-purple-600 hover:text-purple-700">
-                                  <HelpCircle className="h-3 w-3" />
-                                </button>
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                <p className="text-sm">Fecha en que la promoción estará disponible</p>
-                              </TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
-                        </div>
-                        <Input
-                          id="startDate"
-                          type="date"
-                          value={editingPromotion ? editingPromotion.startDate : newPromotion.startDate}
-                          onChange={(e) =>
-                            editingPromotion
-                              ? setEditingPromotion({ ...editingPromotion, startDate: e.target.value })
-                              : setNewPromotion({ ...newPromotion, startDate: e.target.value })
-                          }
-                        />
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-2 mb-2">
-                          <Label htmlFor="endDate">Fecha de Fin</Label>
-                          <TooltipProvider>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <button className="text-purple-600 hover:text-purple-700">
-                                  <HelpCircle className="h-3 w-3" />
-                                </button>
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                <p className="text-sm">Fecha en que la promoción expirará</p>
-                              </TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
-                        </div>
-                        <Input
-                          id="endDate"
-                          type="date"
-                          value={editingPromotion ? editingPromotion.endDate : newPromotion.endDate}
-                          onChange={(e) =>
-                            editingPromotion
-                              ? setEditingPromotion({ ...editingPromotion, endDate: e.target.value })
-                              : setNewPromotion({ ...newPromotion, endDate: e.target.value })
-                          }
-                        />
-                      </div>
-                    </div>
-
-                    <div>
-                      <div className="flex items-center gap-2 mb-2">
-                        <Label htmlFor="maxUsage">Usos Máximos</Label>
-                        <TooltipProvider>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <button className="text-purple-600 hover:text-purple-700">
-                                <HelpCircle className="h-3 w-3" />
-                              </button>
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              <p className="text-sm">Número máximo de veces que se puede usar esta promoción</p>
-                            </TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
-                      </div>
-                      <Input
-                        id="maxUsage"
-                        type="number"
-                        placeholder="Ej: 500"
-                        value={editingPromotion ? editingPromotion.maxUsage : newPromotion.maxUsage}
-                        onChange={(e) =>
-                          editingPromotion
-                            ? setEditingPromotion({ ...editingPromotion, maxUsage: Number.parseInt(e.target.value) })
-                            : setNewPromotion({ ...newPromotion, maxUsage: e.target.value })
-                        }
-                      />
-                    </div>
-
-                    <Button
-                      className="w-full bg-purple-600 hover:bg-purple-700"
-                      onClick={editingPromotion ? handleEditPromotion : handleCreatePromotion}
-                    >
-                      {editingPromotion ? "Guardar Cambios" : "Crear Promoción"}
-                    </Button>
+<Button
+  className="w-full bg-purple-600 hover:bg-purple-700"
+  onClick={editingPromotion ? handleEditPromotion : handleCreatePromotion}
+>
+  {editingPromotion ? "Guardar Cambios" : "Crear Promoción"}
+</Button>
                   </div>
                 </DialogContent>
               </Dialog>
             </div>
             <div className="bg-white p-4 rounded-lg shadow-md space-y-4">
-              <div className="flex gap-4 items-end">
-                <div className="flex-1">
-                  <Label htmlFor="promotionSearch" className="text-sm font-medium mb-2 block">
-                    Buscar Promociones
-                  </Label>
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-                    <Input
-                      id="promotionSearch"
-                      placeholder="Buscar por nombre, descripción, categoría o descuento..."
-                      value={promotionSearch}
-                      onChange={(e) => setPromotionSearch(e.target.value)}
-                      className="pl-10"
-                    />
-                  </div>
-                </div>
-                <div className="w-48">
-                  <Label htmlFor="promotionStatusFilter" className="text-sm font-medium mb-2 block">
-                    Filtrar por Estado
-                  </Label>
-                  <Select value={promotionStatusFilter} onValueChange={(value: any) => setPromotionStatusFilter(value)}>
-                    <SelectTrigger id="promotionStatusFilter">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">Todos</SelectItem>
-                      <SelectItem value="active">Activas</SelectItem>
-                      <SelectItem value="paused">Pausadas</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              <div className="flex items-center justify-between text-sm text-gray-600">
-                <span>
-                  Mostrando {filteredPromotions.length} de {promociones.length} promociones
-                </span>
-                {(promotionSearch || promotionStatusFilter !== "all") && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => {
-                      setPromotionSearch("")
-                      setPromotionStatusFilter("all")
-                    }}
-                    className="text-purple-600 hover:text-purple-700"
-                  >
-                    <X className="h-4 w-4 mr-1" />
-                    Limpiar filtros
-                  </Button>
-                )}
-              </div>
-            </div>
+  <div className="flex gap-4 items-end">
+    <div className="flex-1">
+      <Label htmlFor="promotionSearch" className="text-sm font-medium mb-2 block">
+        Buscar Promociones
+      </Label>
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+        <Input
+          id="promotionSearch"
+          placeholder="Buscar por nombre, descripción, categoría o descuento..."
+          value={promotionSearch}
+          onChange={(e) => setPromotionSearch(e.target.value)}
+          className="pl-10"
+        />
+      </div>
+    </div>
+    <div className="w-48">
+      <Label htmlFor="promotionStatusFilter" className="text-sm font-medium mb-2 block">
+        Filtrar por Estado
+      </Label>
+      <Select value={promotionStatusFilter} onValueChange={(value: any) => setPromotionStatusFilter(value)}>
+        <SelectTrigger id="promotionStatusFilter">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="all">Todos</SelectItem>
+          <SelectItem value="active">Activas</SelectItem>
+          <SelectItem value="paused">Pausadas</SelectItem>
+        </SelectContent>
+      </Select>
+    </div>
+  </div>
+  <div className="flex items-center justify-between text-sm text-gray-600">
+    <span>
+      Mostrando {filteredPromotions.length} de {promociones.length} promociones
+    </span>
+    {(promotionSearch || promotionStatusFilter !== "all") && (
+      <Button
+        variant="ghost"
+        size="sm"
+        onClick={() => {
+          setPromotionSearch("")
+          setPromotionStatusFilter("all")
+        }}
+        className="text-purple-600 hover:text-purple-700"
+      >
+        <X className="h-4 w-4 mr-1" />
+        Limpiar filtros
+      </Button>
+    )}
+  </div>
+</div>
 
-            <div className="bg-white rounded-lg shadow-md overflow-hidden">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Nombre</TableHead>
-                    <TableHead>Categoría</TableHead>
-                    <TableHead>Descuento</TableHead>
-                    <TableHead>Compra Mín.</TableHead>
-                    <TableHead>Fecha Inicio</TableHead>
-                    <TableHead>Fecha Fin</TableHead>
-                    <TableHead>Uso</TableHead>
-                    <TableHead>Estado</TableHead>
-                    <TableHead>Acciones</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredPromotions.length > 0 ? (
-                    filteredPromotions.map((promociones) => (
-                      <TableRow key={promociones.id}>
-                        <TableCell>
-                          <div>
-                            <p className="font-medium">{promociones.name}</p>
-                            <p className="text-xs text-gray-500">{promociones.descripcion}</p>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <span className="px-2 py-1 bg-purple-100 text-purple-700 rounded-full text-xs">
-                            {promociones.category || "Sin categoria"}
-                          </span>
-                        </TableCell>
-                        <TableCell className="text-purple-600 font-semibold">{promociones.discount}</TableCell>
-                        <TableCell className="text-gray-600">${promociones.minPurchase}</TableCell>
-                        <TableCell>{promociones.startDate}</TableCell>
-                        <TableCell>{promociones.endDate}</TableCell>
-                        <TableCell>
-                          <div className="space-y-1">
-                            <div className="text-sm">
-                              {promociones.usos}/{promociones.uso}
-                            </div>
-                            <div className="w-full bg-gray-200 rounded-full h-2">
-                              <div
-                                className="bg-purple-500 h-2 rounded-full transition-all"
-                                style={{ width: `${(promociones.usage / promociones.maxUsage) * 100}%` }}
-                              />
-                            </div>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <Button
-                            size="sm"
-                            variant={promociones.status === "active" ? "default" : "secondary"}
-                            className={
-                              promociones.status === "active"
-                                ? "bg-purple-600 hover:bg-purple-700"
-                                : "bg-blue-800 hover:bg-blue-900 text-white"
-                            }
-                            onClick={() => handleTogglePromotionStatus(promociones.id)}
-                          >
-                            {promociones.status === "active" ? (
-                              <Power className="h-4 w-4 mr-1" />
-                            ) : (
-                              <PowerOff className="h-4 w-4 mr-1" />
-                            )}
-                            {promociones.status === "active" ? "Activa" : "Pausada"}
-                          </Button>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex gap-2">
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => {
-                                setEditingPromotion(promociones)
-                                setIsPromotionDialogOpen(true)
-                              }}
-                            >
-                              <Pencil className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="text-red-600 hover:bg-red-50 bg-transparent"
-                              onClick={() => handleDeletePromotion(promociones.id)}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  ) : (
-                    <TableRow>
-                      <TableCell colSpan={9} className="text-center py-8 text-gray-500">
-                        No se encontraron promociones que coincidan con los filtros
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </div>
-          </div>
+<div className="bg-white rounded-lg shadow-md overflow-hidden">
+  <Table>
+    <TableHeader>
+      <TableRow>
+        <TableHead>Nombre</TableHead>
+        <TableHead>Categoría</TableHead>
+        <TableHead>Descuento</TableHead>
+        <TableHead>Producto</TableHead>
+        <TableHead>Compra Mín.</TableHead>
+        <TableHead>Fecha Inicio</TableHead>
+        <TableHead>Fecha Fin</TableHead>
+        <TableHead>Uso</TableHead>
+        <TableHead>Estado</TableHead>
+        <TableHead>Acciones</TableHead>
+      </TableRow>
+    </TableHeader>
+    <TableBody>
+      {filteredPromotions.length > 0 ? (
+        filteredPromotions.map((promo) => (
+          <TableRow key={promo.id}>
+            <TableCell>
+              <div>
+                <p className="font-medium">{promo.name}</p>
+                <p className="text-xs text-gray-500">{promo.description}</p>
+              </div>
+            </TableCell>
+            <TableCell>
+              {promo.categoriaId ? (
+                (() => {
+                  const categoria = categoriasInventario.find(
+                    (c) => c.categoriaId === promo.categoriaId
+                  );
+                  return (
+                    <span
+                      className="px-2 py-1 bg-purple-100 text-purple-700 rounded-full text-xs"
+                      title={categoria?.descripcion || 'Sin descripción disponible'}
+                    >
+                      {categoria?.nombre || `Categoría no encontrada (ID: ${promo.categoriaId})`}
+                    </span>
+                  );
+                })()
+              ) : (
+                <span className="px-2 py-1 bg-gray-100 text-gray-600 rounded-full text-xs">
+                  Sin categoría
+                </span>
+              )}
+            </TableCell>
+
+            <TableCell className="text-purple-600 font-semibold">
+              {promo.discount ? promo.discount : 'N/A'}
+            </TableCell>          
+
+            <TableCell>
+              {promo.productoId ? (
+               (() => {
+                const producto = productosInventario.find(p => p.productoId === promo.productoId);
+               return (
+                 <span
+                  className="px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs"
+                 title={producto ? `SKU: ${producto.sku} | Precio: $${producto.precio}` : ''}
+               >
+                {producto?.nombre || `Producto no encontrado (ID: ${promo.productoId})`}
+                 </span>
+                );
+             })()
+             ) : (
+               <span className="px-2 py-1 bg-gray-100 text-gray-600 rounded-full text-xs">
+                Sin producto asignado
+               </span>
+         )}
+          </TableCell>
+
+            <TableCell className="text-gray-600">
+              {promo.minPurchase ? `$${promo.minPurchase}` : 'N/A'}
+            </TableCell>
+            
+            <TableCell>{promo.startDate}</TableCell>
+            <TableCell>{promo.endDate}</TableCell>
+            
+            <TableCell>
+              <div className="space-y-1">
+                <div className="text-sm">
+                  {promo.maxUsage
+                    ? `${promo.usage}/${promo.maxUsage}`
+                    : 'Sin límite'}
+                </div>
+                <div className="w-full bg-gray-200 rounded-full h-2">
+                  <div
+                    className="bg-purple-500 h-2 rounded-full transition-all"
+                    title={
+                      promo.maxUsage
+                        ? `${((promo.usage / promo.maxUsage) * 100).toFixed(1)}% usado`
+                        : 'Uso ilimitado'
+                    }
+                    style={{
+                      width: `${
+                        promo.maxUsage
+                          ? Math.min(100, (promo.usage / promo.maxUsage) * 100)
+                          : 0
+                      }%`,
+                    }}
+                  />
+                </div>
+              </div>
+            </TableCell>
+
+            <TableCell>
+              <Button
+                size="sm"
+                variant={promo.status === "active" ? "default" : "secondary"}
+                className={
+                  promo.status === "active"
+                    ? "bg-purple-600 hover:bg-purple-700"
+                    : "bg-blue-800 hover:bg-blue-900 text-white"
+                }
+                onClick={() => handleTogglePromotionStatus(promo.id)}
+              >
+                {promo.status === "active" ? (
+                  <Power className="h-4 w-4 mr-1" />
+                ) : (
+                  <PowerOff className="h-4 w-4 mr-1" />
+                )}
+                {promo.status === "active" ? "Activa" : "Pausada"}
+              </Button>
+            </TableCell>
+            
+            <TableCell>
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    console.log("🔧 Editando promoción:", promo);
+                    setEditingPromotion(promo);
+                    setIsPromotionDialogOpen(true);
+                  }}
+                >
+                  <Pencil className="h-4 w-4" />
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="text-red-600 hover:bg-red-50 bg-transparent"
+                  onClick={() => handleDeletePromotion(promo.id)}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>
+            </TableCell>
+          </TableRow>
+        ))
+      ) : (
+        <TableRow>
+          <TableCell colSpan={10} className="text-center py-8 text-gray-500">
+            No se encontraron promociones que coincidan con los filtros
+          </TableCell>
+        </TableRow>
+      )}
+    </TableBody>
+  </Table>
+</div>
+</div>
         )
 
       case "coupons":
@@ -1615,11 +1864,11 @@ const fetchDashboardStats = async () => {
                               id="code"
                               placeholder="Ej: WELCOME10"
                               className="font-mono uppercase"
-                              value={editingCoupon ? editingCoupon.code : newCoupon.code}
+                              value={editingCoupon ? editingCoupon.codigo : newCoupon.codigo}
                               onChange={(e) =>
                                 editingCoupon
-                                  ? setEditingCoupon({ ...editingCoupon, code: e.target.value.toUpperCase() })
-                                  : setNewCoupon({ ...newCoupon, code: e.target.value.toUpperCase() })
+                                  ? setEditingCoupon({ ...editingCoupon, codigo: e.target.value.toUpperCase() })
+                                  : setNewCoupon({ ...newCoupon, codigo: e.target.value.toUpperCase() })
                               }
                             />
                             <Button
@@ -1628,9 +1877,9 @@ const fetchDashboardStats = async () => {
                               onClick={() => {
                                 const randomCode = generateRandomCode("COUPON")
                                 if (editingCoupon) {
-                                  setEditingCoupon({ ...editingCoupon, code: randomCode })
+                                  setEditingCoupon({ ...editingCoupon, codigo: randomCode })
                                 } else {
-                                  setNewCoupon({ ...newCoupon, code: randomCode })
+                                  setNewCoupon({ ...newCoupon, codigo: randomCode })
                                 }
                               }}
                             >
@@ -1666,9 +1915,9 @@ const fetchDashboardStats = async () => {
                             setSelectedSubSubCategory("")
                             const fullCategory = value
                             if (editingCoupon) {
-                              setEditingCoupon({ ...editingCoupon, category: fullCategory })
+                              setEditingCoupon({ ...editingCoupon, categoria: fullCategory })
                             } else {
-                              setNewCoupon({ ...newCoupon, category: fullCategory })
+                              setNewCoupon({ ...newCoupon, categoria: fullCategory })
                             }
                           }}
                         >
@@ -1697,9 +1946,9 @@ const fetchDashboardStats = async () => {
                               setSelectedSubSubCategory("")
                               const fullCategory = `${selectedMainCategory} > ${value}`
                               if (editingCoupon) {
-                                setEditingCoupon({ ...editingCoupon, category: fullCategory })
+                                setEditingCoupon({ ...editingCoupon, categoria: fullCategory })
                               } else {
-                                setNewCoupon({ ...newCoupon, category: fullCategory })
+                                setNewCoupon({ ...newCoupon, categoria: fullCategory })
                               }
                             }}
                           >
@@ -1727,9 +1976,9 @@ const fetchDashboardStats = async () => {
                                 setSelectedSubSubCategory(value)
                                 const fullCategory = `${selectedMainCategory} > ${selectedSubCategory} > ${value}`
                                 if (editingCoupon) {
-                                  setEditingCoupon({ ...editingCoupon, category: fullCategory })
+                                  setEditingCoupon({ ...editingCoupon, categoria: fullCategory })
                                 } else {
-                                  setNewCoupon({ ...newCoupon, category: fullCategory })
+                                  setNewCoupon({ ...newCoupon, categoria: fullCategory })
                                 }
                               }}
                             >
@@ -1751,11 +2000,11 @@ const fetchDashboardStats = async () => {
                       </div>
                     )}
 
-                    {(selectedMainCategory || (editingCoupon && editingCoupon.category)) && (
+                    {(selectedMainCategory || (editingCoupon && editingCoupon.categoria)) && (
                       <div className="p-3 bg-purple-50 rounded-lg border border-purple-200">
                         <p className="text-sm text-gray-600">Categoría seleccionada:</p>
                         <p className="font-semibold text-purple-700">
-                          {editingCoupon ? editingCoupon.category : newCoupon.category}
+                          {editingCoupon ? editingCoupon.categoria : newCoupon.categoria}
                         </p>
                       </div>
                     )}
@@ -1962,13 +2211,13 @@ const fetchDashboardStats = async () => {
                         <Input
                           id="startDate"
                           type="date"
-                          value={editingCoupon ? editingCoupon.startDate : newCoupon.startDate}
-                          onChange={(e) =>
-                            editingCoupon
-                              ? setEditingCoupon({ ...editingCoupon, startDate: e.target.value })
-                              : setNewCoupon({ ...newCoupon, startDate: e.target.value })
-                          }
-                        />
+  value={editingPromotion ? editingPromotion.startDate : newPromotion.startDate}
+  onChange={(e) =>
+    editingPromotion
+      ? setEditingPromotion({ ...editingPromotion, startDate: e.target.value })
+      : setNewPromotion({ ...newPromotion, startDate: e.target.value })
+  }
+/>
                       </div>
                       <div>
                         <div className="flex items-center gap-2 mb-2">
@@ -1989,13 +2238,13 @@ const fetchDashboardStats = async () => {
                         <Input
                           id="expiryDate"
                           type="date"
-                          value={editingCoupon ? editingCoupon.expiryDate : newCoupon.expiryDate}
-                          onChange={(e) =>
-                            editingCoupon
-                              ? setEditingCoupon({ ...editingCoupon, expiryDate: e.target.value })
-                              : setNewCoupon({ ...newCoupon, expiryDate: e.target.value })
-                          }
-                        />
+  value={editingPromotion ? editingPromotion.startDate : newPromotion.startDate}
+  onChange={(e) =>
+    editingPromotion
+      ? setEditingPromotion({ ...editingPromotion, startDate: e.target.value })
+      : setNewPromotion({ ...newPromotion, startDate: e.target.value })
+  }
+/>
                       </div>
                     </div>
 
@@ -2056,7 +2305,7 @@ const fetchDashboardStats = async () => {
                           id="applicableProducts"
                           placeholder="IDs separados por comas (ej: 101, 102, 103)"
                           value={
-                            editingCoupon ? editingCoupon.applicableProducts.join(", ") : newCoupon.applicableProducts
+                            editingCoupon ? editingCoupon.applicableProducts.join(",") : newCoupon.applicableProducts
                           }
                           onChange={(e) =>
                             editingCoupon
@@ -2193,7 +2442,7 @@ const fetchDashboardStats = async () => {
                       <TableRow key={coupon.id}>
                         <TableCell>
                           <div>
-                            <p className="font-mono font-bold">{coupon.code}</p>
+                            <p className="font-mono font-bold">{coupon.codigo}</p>
                             <p className="text-xs text-gray-500">{coupon.description}</p>
                             {coupon.isStackable && (
                               <Badge variant="outline" className="mt-1 text-xs">
@@ -2204,7 +2453,7 @@ const fetchDashboardStats = async () => {
                         </TableCell>
                         <TableCell>
                           <span className="px-2 py-1 bg-purple-100 text-purple-700 rounded-full text-xs">
-                            {coupon.category}
+                            {coupon.categoria}
                           </span>
                         </TableCell>
                         <TableCell className="text-purple-600 font-semibold">{coupon.discount}</TableCell>
