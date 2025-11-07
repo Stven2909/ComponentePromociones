@@ -26,7 +26,7 @@ jobs:
     - name: 2. Checkout del frontend (rama frontend)
       uses: actions/checkout@v4
       with:
-        ref: frontend
+        ref: Frontend
         path: Frontend
 
     # ⚙️ Setup Node.js para compilar frontend
