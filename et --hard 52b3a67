@@ -1,0 +1,17 @@
+[33m994af9e[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m HEAD@{0}: pull origin main --allow-unrelated-histories: Merge made by the 'ort' strategy.
+[33m52b3a67[m HEAD@{1}: Branch: renamed refs/heads/master to refs/heads/main
+[33m52b3a67[m HEAD@{3}: commit: antes del deploy
+[33m547b611[m[33m ([m[1;31morigin/Frontend[m[33m)[m HEAD@{4}: commit: Login integrado
+[33m39dad2d[m HEAD@{5}: checkout: moving from Frontend to master
+[33m6bc2e48[m[33m ([m[1;32mFrontend[m[33m)[m HEAD@{6}: commit (cherry-pick): Actualizar analytics dinámico en admin-dashboard
+[33m724bf91[m HEAD@{7}: checkout: moving from master to Frontend
+[33m39dad2d[m HEAD@{8}: checkout: moving from Frontend to master
+[33m724bf91[m HEAD@{9}: checkout: moving from Frontend to Frontend
+[33m724bf91[m HEAD@{10}: reset: moving to HEAD
+[33m724bf91[m HEAD@{11}: checkout: moving from master to Frontend
+[33m39dad2d[m HEAD@{12}: commit: Actualizar analytics dinámico en admin-dashboard
+[33m3c42a49[m HEAD@{13}: checkout: moving from Frontend to master
+[33m724bf91[m HEAD@{14}: checkout: moving from master to Frontend
+[33m3c42a49[m HEAD@{15}: checkout: moving from Frontend to master
+[33m724bf91[m HEAD@{16}: checkout: moving from master to Frontend
+[33m3c42a49[m HEAD@{17}: commit (initial): Frontend de Isaac en progreso
