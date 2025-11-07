@@ -9,61 +9,50 @@ jobs:
   build_and_deploy:
     runs-on: ubuntu-latest
 
-    # Variables de entorno para centralizar y limpiar las credenciales
     env:
       VPS_HOST: 37.60.238.21
-      VPS_USER: root # ¡Recomendación: Cambiar a un usuario de bajo privilegio!
+      VPS_USER: root
       FRONTEND_PATH: /var/www/frontend
       BACKEND_PATH: /var/opt/promociones
 
     steps:
-      - name: 1. Checkout del Código
-        uses: actions/checkout@v4
+    - name: 1. Checkout del Código
+      uses: actions/checkout@v4
 
-      # --- CONFIGURACIÓN DEL ENTORNO DE COMPILACIÓN ---
-      - name: 2. Setup Node.js para Frontend Build
-        # Usar la versión de Node.js que requiere tu proyecto de Frontend
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
+    # --- CONFIGURACIÓN DEL ENTORNO DE COMPILACIÓN ---
+    - name: 2. Setup Node.js para Frontend Build
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
 
-      - name: 3. Build del Frontend (Genera 'dist')
-        run: |
-          cd "admin-panel v2/frontend" # <-- ¡CORREGIDO: RUTAS ENTRE COMILLAS!
-          npm install
-          npm run build # Esto debe generar la carpeta 'dist' dentro de 'frontend/'
+    - name: 3. Build del Frontend (React en admin-panel/app)
+      run: |
+        cd admin-panel/app
+        npm install
+        npm run build
 
-      # --- PASO DE DESPLIEGUE: FRONTEND (SCP para la transferencia de archivos) ---
-      - name: 4. Subir Frontend compilado al VPS
-        uses: appleboy/scp-action@v0.1.4
-        with:
-          host: ${{ env.VPS_HOST }}
-          username: ${{ env.VPS_USER }}
-          key: ${{ secrets.VPS_SSH_KEY }}
-          # Copia el CONTENIDO de la carpeta 'dist' a la ruta de destino
-          source: "admin-panel v2/frontend/dist/*" # <-- ¡CORREGIDO: RUTAS ENTRE COMILLAS!
-          target: "${{ env.FRONTEND_PATH }}"
+    # --- DESPLIEGUE DEL FRONTEND ---
+    - name: 4. Subir Frontend compilado al VPS
+      uses: appleboy/scp-action@v0.1.4
+      with:
+        host: ${{ env.VPS_HOST }}
+        username: ${{ env.VPS_USER }}
+        key: ${{ secrets.VPS_SSH_KEY }}
+        source: "admin-panel/app/dist/*"
+        target: "${{ env.FRONTEND_PATH }}"
 
-      # --- PASO DE DESPLIEGUE: BACKEND (SSH para comandos remotos) ---
-      - name: 5. Despliegue del Backend y reinicio
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ env.VPS_HOST }}
-          username: ${{ env.VPS_USER }}
-          key: ${{ secrets.VPS_SSH_KEY }}
-          
-          # Comandos para ejecutar en el VPS (Estos ya usaban env.BACKEND_PATH, que es remoto)
-          script: |
-            echo "Actualizando backend en ${{ env.BACKEND_PATH }}..."
-            
-            # 1. Pull de código del repositorio
-            cd ${{ env.BACKEND_PATH }}
-            git pull origin main
-            
-            # 2. Instalar dependencias solo de producción
-            npm install --production
-            
-            # 3. Reiniciar el servicio usando pm2
-            echo "Reiniciando servicio promociones..."
-            pm2 restart promociones
-            echo "CI/CD completado exitosamente."
+    # --- DESPLIEGUE DEL BACKEND Y REINICIO ---
+    - name: 5. Despliegue del Backend y reinicio
+      uses: appleboy/ssh-action@v1.0.3
+      with:
+        host: ${{ env.VPS_HOST }}
+        username: ${{ env.VPS_USER }}
+        key: ${{ secrets.VPS_SSH_KEY }}
+        script: |
+          echo "Actualizando backend en ${{ env.BACKEND_PATH }}..."
+          cd ${{ env.BACKEND_PATH }}
+          git pull origin main
+          npm install --production
+          echo "Reiniciando servicio promociones..."
+          pm2 restart promociones
+          echo "CI/CD completado exitosamente."
