@@ -1,4 +1,7 @@
 "use client"
+//Agregado
+import { ProtectedDashboard } from './protectedDashboard';
+
 
 import { PROMOCIONES_URL, CUPONES_URL, STATS_URL, BASE_URL } from '@/lib/apiRoutes';
 
@@ -73,6 +76,7 @@ import {
   Radar,
 } from "recharts"
 import { LoginWidget } from "./login-widget"
+import { parse } from 'path';
 
 
 // Al inicio del componente, después de los imports
@@ -84,10 +88,14 @@ interface PromocionBackend {
   tipoPromocion: 'DESCUENTO_PORCENTAJE' | 'DESCUENTO_MONTO_FIJO' | 'DOS_POR_UNO' | 'TRES_POR_DOS' | 'ENVIO_GRATIS' | 'REGALO_PRODUCTO' | 'CASHBACK'
   tipoCondicion: 'MONTO_MINIMO' | 'CANTIDAD_PRODUCTOS' | 'SIN_CONDICION'
   valorDescuento: number
-  fechaInicio: string // "YYYY-MM-DD HH:mm:ss"
+  fechaInicio: string
   fechaFin: string
   esAcumulable: boolean
   estaActiva: boolean
+  usosTotales: number        // AGREGAR
+  usosMaximos: number | null // AGREGAR
+  productoId: number | null  // AGREGAR
+  categoriaId: number | null // AGREGAR
 }
 
 interface CuponBackend {
@@ -100,12 +108,27 @@ interface CuponBackend {
   fecha_inicio: string // "YYYY-MM-DDTHH:mm:ss"
   fecha_fin: string
   promocionId: number
+  categoriaId?: number
 }
 
 interface StatsBackend {
   promocionesActivas: number
   cuponesUtilizados: number
   cuponesActivos: number
+}
+
+interface ProductoDTO {
+  productoId: number
+  sku: string
+  nombre: string
+  categoriaId: number
+  codigoBarras: string
+  stockMinimo: number
+  stockMaximo: number
+  precio: number
+  activo: boolean
+  creadoEn: string
+  actualizadoEn: string
 }
 
 const generateRandomCode = (prefix: string, length = 8): string => {
@@ -179,16 +202,32 @@ export function AdminDashboard() {
  const [errorStats, setErrorStats] = useState<string | null>(null);
 
 
+
 // ==================== FUNCIÓN AUXILIAR ====================
-const formatDate = (date: string, hour: string) => {
-  return date.includes(' ') ? date : `${date} ${hour}`;
+const formatDate = (date: string, hour: string): string => {
+  if (!date) return '';
+
+  // Si ya tiene 'T', devolvemos la parte sin 'Z' ni zona
+  if (date.includes('T')) {
+    // Limpia cualquier 'Z' o zona horaria (+00:00)
+    return date.replace('Z', '').replace(/\+\d{2}:\d{2}$/, '');
+  }
+
+  // Normaliza el formato con 'T' pero sin zona
+  return `${date}T${hour}`;
 };
 
 // Función para extraer el valor numérico del descuento
 const extractDiscountValue = (discount: string): number => {
+  // ✅ Validar que discount no sea null/undefined/vacío
+  if (!discount) return 0;
+  
   // Elimina cualquier símbolo de % o $ y convierte a número
   const cleanValue = discount.replace(/[%$\s]/g, '');
-  return parseFloat(cleanValue) || 0;
+  const value = parseFloat(cleanValue);
+  
+  // ✅ Validar que sea un número válido y positivo
+  return !isNaN(value) && value >= 0 ? value : 0;
 };
 
 // -------------------------------------------------------------------
@@ -205,21 +244,32 @@ const extractDiscountValue = (discount: string): number => {
       return
     }
 
+     // Validar que el descuento sea válido
+     const valorDescuento = extractDiscountValue(newPromotion.discount)
+     if (valorDescuento <= 0) {
+       toast({
+         title: 'Error',
+         description: 'El valor del descuento debe ser mayor a 0',
+         variant: 'destructive',
+       })
+       return
+     }
+
     // Mapear al formato del backend
     const payload = {
       nombre: newPromotion.name,
       codigo: newPromotion.name.toUpperCase().replace(/\s+/g, '_').substring(0, 20),
-      descripcion: newPromotion.description,
+      descripcion: newPromotion.description || '',
       tipoPromocion: newPromotion.type === 'percentage' ? 'DESCUENTO_PORCENTAJE' : 'DESCUENTO_MONTO_FIJO',
       tipoCondicion: 'MONTO_MINIMO',
-      valorDescuento: extractDiscountValue(newPromotion.discount),
+      valorDescuento: valorDescuento,
       fechaInicio: formatDate(newPromotion.startDate, '00:00:00'),
       fechaFin: formatDate(newPromotion.endDate, '23:59:59'),
       esAcumulable: true,
       estaActiva: true,
-      categoriaId: newPromotion.categoriaId,
-      productoId: newPromotion.productoId,
-      usosMaximos: parseInt(newPromotion.maxUsage || '0'), // 👈 aquí lo agregas
+      categoriaId: newPromotion.categoriaId || null,
+      productoId: newPromotion.productoId || null,
+      usosMaximos: newPromotion.maxUsage ? parseInt(newPromotion.maxUsage) : null,
     }
 
     console.log("📦 Payload CREATE:", payload);
@@ -231,7 +281,10 @@ const extractDiscountValue = (discount: string): number => {
       credentials: 'include',
     })
 
-    if (!response.ok) throw new Error('Error al crear promoción')
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}))
+      throw new Error(errorData.message || `Error ${response.status}: No se pudo crear la promoción`)
+    }
 
     toast({
       title: 'Éxito',
@@ -251,10 +304,11 @@ const extractDiscountValue = (discount: string): number => {
       minPurchase: '',
       categoriaId: null,
       productoId: null,
-      usosMaximos: '',
     })
-    fetchPromociones()
+    
+    await fetchPromociones()
   } catch (error) {
+    console.error('Error creando promoción:', error)
     toast({
       title: 'Error',
       description: error instanceof Error ? error.message : 'No se pudo crear la promoción',
@@ -280,18 +334,19 @@ const extractDiscountValue = (discount: string): number => {
   
       const payload = {
         nombre: editingPromotion.name,
-        codigo: editingPromotion.codigo || editingPromotion.name.toUpperCase().replace(/\s+/g, '_').substring(0, 20),
+        codigo: editingPromotion.codigo.substring(0, 10), // Limita a 10 caracteres
         descripcion: editingPromotion.description,
         tipoPromocion: editingPromotion.type === 'percentage' ? 'DESCUENTO_PORCENTAJE' : 'DESCUENTO_MONTO_FIJO',
         tipoCondicion: 'MONTO_MINIMO',
         valorDescuento: discountValue,
         fechaInicio: formatDate(editingPromotion.startDate, '00:00:00'),
         fechaFin: formatDate(editingPromotion.endDate, '23:59:59'),
-        esAcumulable: true,
+        esAcumulable: editingPromotion.stackable ?? true,
         estaActiva: editingPromotion.status === 'active',
-        categoriaId: editingPromotion.categoriaId,
-        productoId: editingPromotion.productoId,
-        usosMaximos: parseInt(editingPromotion.maxUsage?.toString() || '0'), // 👈 aquí lo agregas
+        categoriaId: editingPromotion.categoriaId || 0,
+        productoId: editingPromotion.productoId || 0,
+        usosMaximos: parseInt(editingPromotion.maxUsage?.toString() || '0'),
+        usosTotales: editingPromotion.usage || 0,
       }
   
       console.log("📦 Payload EDIT:", payload);
@@ -354,152 +409,126 @@ const extractDiscountValue = (discount: string): number => {
 };
 
 const handleTogglePromotionStatus = async (id: number) => {
-  console.log(`--- [TOGGLE] 🟢 Iniciando cambio de estado para ID: ${id}`);
-  
-  // 1. Encontrar la promoción actual y determinar el nuevo estado
   const promoToToggle = promociones.find((p) => p.id === id);
-  if (!promoToToggle) {
-      console.error(`--- [TOGGLE FAIL] 🔴 No se encontró la promoción con ID: ${id} en el estado actual.`);
-      return;
-  }
+  if (!promoToToggle) return;
 
-  // 2. Determinar si el nuevo estado es ACTIVO o INACTIVO (lo opuesto al actual)
-  const newStatus = !promoToToggle.estaActiva; 
-  console.log(`--- [TOGGLE INFO] Estado actual (estaActiva): ${promoToToggle.estaActiva}. Nuevo estado a enviar: ${newStatus}`);
+  const newStatus = !promoToToggle.estaActiva;
   
   try {
-      // 3. Crear el payload de mapeo seguro para el backend (PUT)
-      const payload = {
-          // Mapeamos las propiedades del frontend (que vienen de fetchPromociones) de vuelta al formato del backend:
-          // Asegúrate de usar la propiedad correcta de promoToToggle a la derecha:
-          nombre: promoToToggle.name || promoToToggle.nombre || "", 
-          codigo: promoToToggle.codigo ?? "", // Usar 'codigo' o "" (cadena vacía) si es null/undefined
-          descripcion: promoToToggle.description || promoToToggle.descripcion || "",
-          tipoPromocion: promoToToggle.type || "DESCUENTO_PORCENTAJE", 
-          tipoCondicion: promoToToggle.condition || "SIN_CONDICION",
-          
-          // CRÍTICO: Aseguramos el valor numérico
-          valorDescuento: parseFloat(String(promoToToggle.discount || 0.01)),
-          
-          fechaInicio: promoToToggle.startDate || "",
-          fechaFin: promoToToggle.endDate || "",
-          esAcumulable: promoToToggle.stackable || false,
-          
-          // EL ÚNICO CAMBIO:
-          estaActiva: newStatus, 
-      };
-      
-      console.log('--- [TOGGLE PAYLOAD] 📥 Enviando al servidor:', payload);
+    // Convertir tipo a enum
+    const tipoPromocionMap = {
+      'percentage': 'DESCUENTO_PORCENTAJE',
+      'fixed': 'DESCUENTO_MONTO_FIJO'
+    };
 
-      const response = await fetch(`${PROMOCIONES_URL}/${id}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-          credentials: 'include',
-      });
+    const payload = {
+      nombre: promoToToggle.name,
+      codigo: promoToToggle.codigo,
+      descripcion: promoToToggle.description,
+      tipoPromocion: tipoPromocionMap[promoToToggle.type as keyof typeof tipoPromocionMap],
+      tipoCondicion: promoToToggle.condition,
+      valorDescuento: parseFloat(promoToToggle.discount.replace(/[%$]/g, '')),
+      fechaInicio: promoToToggle.startDate.includes('T') 
+        ? promoToToggle.startDate 
+        : `${promoToToggle.startDate}T00:00:00`,
+      fechaFin: promoToToggle.endDate.includes('T')
+        ? promoToToggle.endDate
+        : `${promoToToggle.endDate}T23:59:59`,
+      esAcumulable: promoToToggle.stackable,
+      estaActiva: newStatus,
+      usosTotales: promoToToggle.usage || 0,
+      usosMaximos: promoToToggle.maxUsage || 0,
+      productoId: promoToToggle.productoId || 0,
+      categoriaId: promoToToggle.categoriaId || 0,
+    };
 
-      // 4. Verificar la respuesta del servidor
-      if (!response.ok) {
-          const errorText = await response.text();
-          console.error(`--- [TOGGLE ERROR] 💥 Respuesta del servidor: ${response.status}`, errorText);
-          throw new Error('Error al cambiar el estado de la promoción');
-      }
-      
-      console.log('--- [TOGGLE SUCCESS] ✅ Estado actualizado en el backend. Código 200/204.');
+    console.log('Payload TOGGLE:', payload);
 
-      toast({
-          title: 'Éxito',
-          description: `Promoción ${newStatus ? 'activada' : 'pausada'} correctamente.`,
-      });
+    const response = await fetch(`${PROMOCIONES_URL}/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+      credentials: 'include',
+    });
 
-      // 5. Recargar la lista para mostrar el nuevo estado
-      fetchPromociones();
-      console.log('--- [TOGGLE COMPLETE] Lista de promociones recargada.');
-      setPromotionStatusFilter("all"); // Reset filter to show all promotions
+    if (!response.ok) throw new Error('Error al cambiar el estado');
+
+    toast({
+      title: 'Éxito',
+      description: `Promoción ${newStatus ? 'activada' : 'pausada'}.`,
+    });
+
+    fetchPromociones();
 
   } catch (error) {
-      console.error('--- [TOGGLE CATCH] 🚫 Fallo en la operación:', error);
-      toast({
-          title: 'Error',
-          description: error instanceof Error ? error.message : 'No se pudo cambiar el estado',
-          variant: 'destructive',
-      });
+    console.error('Error:', error);
+    toast({
+      title: 'Error',
+      description: error instanceof Error ? error.message : 'No se pudo cambiar el estado',
+      variant: 'destructive',
+    });
   }
 };
 
-  const handleCreateCoupon = () => {
-    if (bulkGeneration.enabled && bulkGeneration.quantity > 1) {
-      // Generate multiple coupons
-      const newCoupons: CuponBackend[] = []
-      for (let i = 0; i < bulkGeneration.quantity; i++) {
-        const coupon: CuponBackend = {
-          id: cupones.length + newCoupons.length + 1,
-          codigo: generateRandomCode(bulkGeneration.prefix),
-          discount: newCoupon.discount,
-          expiryDate: newCoupon.expiryDate,
-          startDate: newCoupon.startDate,
-          status: "active",
-          usage: 0,
-          maxUsage: newCoupon.maxUsage ? Number.parseInt(newCoupon.maxUsage) : 999999,
-          usagePerUser: newCoupon.usagePerUser ? Number.parseInt(newCoupon.usagePerUser) : 999999,
-          type: newCoupon.type,
-          description: newCoupon.description,
-          category: newCoupon.category,
-          minPurchase: Number.parseInt(newCoupon.minPurchase) || 0,
-          isStackable: newCoupon.isStackable,
-          applicableProducts: newCoupon.applicableProducts
-            ? newCoupon.applicableProducts.split(",").map((p) => p.trim())
-            : [],
-          excludedProducts: newCoupon.excludedProducts
-            ? newCoupon.excludedProducts.split(",").map((p) => p.trim())
-            : [],
-        }
-        newCoupons.push(coupon)
-      }
-      setCupones([...cupones, ...newCupones])
-    } else {
-      // Generate single coupon
-      const cupon: CuponBackend = {
-        id: cupones.length + 1,
-        codigo: newCoupon.code || generateRandomCode("COUPON"),
-        discount: newCoupon.discount,
-        expiryDate: newCoupon.expiryDate,
-        startDate: newCoupon.startDate,
-        status: "active",
-        usage: 0,
-        maxUsage: newCoupon.maxUsage ? Number.parseInt(newCoupon.maxUsage) : 999999,
-        usagePerUser: newCoupon.usagePerUser ? Number.parseInt(newCoupon.usagePerUser) : 999999,
-        type: newCoupon.type,
-        description: newCoupon.description,
-        category: newCoupon.category,
-        minPurchase: Number.parseInt(newCoupon.minPurchase) || 0,
-        isStackable: newCoupon.isStackable,
-        applicableProducts: newCoupon.applicableProducts
-          ? newCoupon.applicableProducts.split(",").map((p) => p.trim())
-          : [],
-        excludedProducts: newCoupon.excludedProducts ? newCoupon.excludedProducts.split(",").map((p) => p.trim()) : [],
-      }
-      setCupones([...cupones, cupon])
+const handleCreateCoupon = () => {
+  if (bulkGeneration.enabled && bulkGeneration.quantity > 1) {
+    // 🚀 Generar múltiples cupones
+    const newCoupons: CuponBackend[] = [];
+
+    for (let i = 0; i < bulkGeneration.quantity; i++) {
+      const coupon: CuponBackend = {
+        id: cupones.length + newCoupons.length + 1,
+        codigo: generateRandomCode(bulkGeneration.prefix),
+        tipo: newCoupon.tipo,
+        descuento: parseFloat(newCoupon.descuento) || 0,
+        usos: 0,
+        estado: "ACTIVO",
+        fecha_inicio: newCoupon.fecha_inicio,
+        fecha_fin: newCoupon.fecha_fin,
+        promocionId: newCoupon.promocionId || 0,
+        categoriaId: newCoupon.categoriaId || 0, // ✅ nuevo campo
+      };
+
+      newCoupons.push(coupon);
     }
 
-    setNewCoupon({
-      code: "",
-      discount: "",
-      expiryDate: "",
-      startDate: "",
-      maxUsage: "",
-      usagePerUser: "",
-      type: "percentage",
-      description: "",
-      category: "",
-      minPurchase: "",
-      isStackable: false,
-      applicableProducts: "",
-      excludedProducts: "",
-    })
-    setBulkGeneration({ enabled: false, quantity: 1, prefix: "COUPON" })
-    setIsCouponDialogOpen(false)
+    setCupones([...cupones, ...newCoupons]);
+  } else {
+    // 🎯 Generar cupón único
+    const cupon: CuponBackend = {
+      id: cupones.length + 1,
+      codigo: newCoupon.codigo || generateRandomCode("COUPON"),
+      tipo: newCoupon.tipo,
+      descuento: parseFloat(newCoupon.descuento) || 0,
+      usos: 0,
+      estado: "ACTIVO",
+      fecha_inicio: newCoupon.fecha_inicio,
+      fecha_fin: newCoupon.fecha_fin,
+      promocionId: newCoupon.promocionId || 0,
+      categoriaId: newCoupon.categoriaId || 0, // ✅ nuevo campo
+    };
+
+    setCupones([...cupones, cupon]);
   }
+
+  // 🔄 Limpiar formulario
+  setNewCoupon({
+    id: 0,
+    codigo: "",
+    tipo: "Porcentaje",
+    descuento: "",
+    usos: 0,
+    estado: "ACTIVO",
+    fecha_inicio: "",
+    fecha_fin: "",
+    promocionId: 0,
+    categoriaId: 0,
+  });
+
+  setBulkGeneration({ enabled: false, quantity: 1, prefix: "COUPON" });
+  setIsCouponDialogOpen(false);
+};
+
 
   const handleEditCoupon = () => {
     if (editingCoupon) {
@@ -572,15 +601,11 @@ const monthlyRevenueData = meses.map((mes, i) => {
     const matchesSearch =
       (promocion.name || "").toLowerCase().includes(promotionSearch.toLowerCase()) ||
       (promocion.description || "").toLowerCase().includes(promotionSearch.toLowerCase()) ||
-      (promocion.code || "").toLowerCase().includes(promotionSearch.toLowerCase()) ||
+      (promocion.codigo || "").toLowerCase().includes(promotionSearch.toLowerCase()) ||
       String(promocion.discount || "").toLowerCase().includes(promotionSearch.toLowerCase());
-  
-    const matchesStatus =
-      promotionStatusFilter === "all" ||
-      promocion.status === promotionStatusFilter;
-  
-    return matchesSearch && matchesStatus;
+    return matchesSearch;
   });
+  
   
   const filteredCoupons = cupones.filter((cupon) => {
     const matchesSearch =
@@ -629,7 +654,9 @@ const monthlyRevenueData = meses.map((mes, i) => {
     fecha_inicio: "",
     fecha_fin: "",
     promocionId: 0,
-  })
+    categoriaId: 0, // 👈 agregado
+  });
+  
 
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
@@ -640,55 +667,60 @@ const monthlyRevenueData = meses.map((mes, i) => {
 const fetchPromociones = async () => {
   console.log('--- [FETCH] Iniciando fetchPromociones...');
   try {
-    const response = await fetch(PROMOCIONES_URL, {
-      method: 'GET',
-      credentials: 'include',
-    });
+      const response = await fetch(PROMOCIONES_URL, {
+          method: 'GET',
+          credentials: 'include',
+      });
 
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(
-        errorData.message || `Error ${response.status}: No se pudieron cargar las promociones`
-      );
-    }
+      if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(
+              errorData.message || `Error ${response.status}: No se pudieron cargar las promociones`
+          );
+      }
 
-    const data = await response.json();
-    console.log('--- [FETCH Promociones OK] Promociones cargadas:', data.length);
+      const data = await response.json();
+      console.log('--- [FETCH Promociones OK] Promociones cargadas:', data.length);
 
-    const formattedPromos = data.map((promo: any) => ({
-      id: promo.id,
-      codigo: promo.codigo || "",
-      name: promo.nombre,
-      productoId: promo.productoId || null,
-      description: promo.descripcion,
-      type: promo.tipoPromocion === 'DESCUENTO_PORCENTAJE' ? 'percentage' : 'fixed',
-      condition: promo.tipoCondicion,
-      // Asegurar que el descuento siempre tenga el formato correcto
-      discount: `${promo.valorDescuento}${promo.tipoPromocion === 'DESCUENTO_PORCENTAJE' ? '%' : '$'}`,
-      startDate: promo.fechaInicio?.split(' ')[0] || promo.fechaInicio,
-      endDate: promo.fechaFin?.split(' ')[0] || promo.fechaFin,
-      stackable: promo.esAcumulable,
-      estaActiva: !!promo.estaActiva,
-      status: promo.estaActiva ? "active" : "paused",
-      usage: promo.usosTotales || 0,
-      maxUsage: promo.usosMaximos || 0,
-      minPurchase: 0,
-      categoriaId: promo.categoriaId || null,
-    }));
+      const formattedPromos = data.map((promo: any) => ({
+          id: promo.id,
+          codigo: promo.codigo || "",
+          name: promo.nombre,
+          productoId: promo.productoId || null,
+          description: promo.descripcion,
+          type: promo.tipoPromocion === 'DESCUENTO_PORCENTAJE' ? 'percentage' : 'fixed',
+          condition: promo.tipoCondicion,
+          // Asegurar que el descuento siempre tenga el formato correcto
+          discount: promo.valorDescuento != null 
+          ? `${promo.valorDescuento}${promo.tipoPromocion === 'DESCUENTO_PORCENTAJE' ? '%' : '$'}`
+          : '0',
+          
+          // 🚨 CORRECCIÓN APLICADA AQUÍ:
+          startDate: promo.fechaInicio?.split(' ')[0] ?? null, // Si es undefined, se asigna null
+          endDate: promo.fechaFin?.split(' ')[0] ?? null, // Si es undefined, se asigna null
+          
+          stackable: promo.esAcumulable,
+          estaActiva: !!promo.estaActiva,
+          status: promo.estaActiva ? "active" : "paused",
+          usage: promo.usosTotales || 0,
+          maxUsage: promo.usosMaximos || 0,
+          minPurchase: 0,
+          categoriaId: promo.categoriaId || null,
+      }));
 
-    setPromociones(formattedPromos);
-    return formattedPromos;
+      setPromociones(formattedPromos);
+      return formattedPromos;
   } catch (error) {
-    console.error('Error fetching promociones:', error);
-    toast({
-      title: 'Error',
-      description:
-        error instanceof Error
-          ? error.message
-          : 'No se pudieron cargar las promociones',
-      variant: 'destructive',
-    });
-    return [];
+      console.error('Error fetching promociones:', error);
+      toast({
+          title: 'Error',
+          description:
+              error instanceof Error
+                  ? error.message
+                  : 'No se pudieron cargar las promociones',
+          variant: 'destructive',
+      });
+      return [];
   }
 };
 // Función para fetch de cupones activos desde el backend
@@ -814,33 +846,45 @@ const fetchDashboardStats = async () => {
  }
  };
 
- //Funcion de Fetch para traer las categorias desde inventario
+// ✅ Función de Fetch para traer las categorías desde Inventario
 const fetchCategoriasInventario = async () => {
   try {
-    setLoadingCategorias(true)
+    setLoadingCategorias(true);
     const CATEGORIAS_INVENTARIO_URL = `${BASE_URL}/api/promociones/integracion/inventario/categorias`;
 
     const response = await fetch(CATEGORIAS_INVENTARIO_URL, {
-    method: 'GET',
+      method: 'GET',
       credentials: 'include',
-    })
-    
-    if (!response.ok) throw new Error('Error al cargar categorías')
-    
-    const data = await response.json()
-    console.log('Categorías de Inventario:', data)
-    setCategoriasInventario(data)
+    });
+
+    if (!response.ok) throw new Error('Error al cargar categorías');
+
+    const data = await response.json();
+    console.log('Categorías de Inventario (raw):', data);
+
+    // ✅ Filtrar y mapear categorías válidas
+    const categoriasValidas = data
+      .filter((cat: any) => (cat.id ?? cat.categoriaId) != null && cat.nombre)
+      .map((cat: any) => ({
+        id: cat.id ?? cat.categoriaId,
+        nombre: cat.nombre,
+        descripcion: cat.descripcion,
+      }));
+
+    console.log(`Categorías válidas: ${categoriasValidas.length} de ${data.length}`);
+    setCategoriasInventario(categoriasValidas);
   } catch (error) {
-    console.error('Error fetching categorías:', error)
+    console.error('Error fetching categorías:', error);
     toast({
       title: 'Error',
       description: 'No se pudieron cargar las categorías de inventario',
       variant: 'destructive',
-    })
+    });
   } finally {
-    setLoadingCategorias(false)
+    setLoadingCategorias(false);
   }
-}
+};
+
 //Funcion de Fetch para traer los productos desde inventario
 const PRODUCTOS_URL = `${BASE_URL}/api/promociones/integracion/inventario/productos`;
 
@@ -1174,7 +1218,6 @@ case "promociones":
                     }
                   />
                 </div>
-
                       
   <div className="flex items-center gap-2 mb-2">
     <Label htmlFor="categoria">Categoría del Producto</Label>
@@ -1218,7 +1261,7 @@ case "promociones":
       <SelectContent>
         <SelectItem value="none">Sin categoría específica</SelectItem>
         {categoriasInventario.map((categoria) => (
-          <SelectItem key={categoria.categoriaId} value={categoria.categoriaId.toString()}>
+          <SelectItem key={categoria.categoriaId} value={String(categoria.categoriaId)}>
             {categoria.nombre}
             {categoria.descripcion && (
               <span className="text-xs text-gray-500 ml-2">
@@ -1341,66 +1384,82 @@ case "promociones":
 </div>
 
 <div className="grid grid-cols-3 gap-4">
-  <div>
-    <div className="flex items-center gap-2 mb-2">
-      <Label htmlFor="type">Tipo de Descuento</Label>
-      <TooltipProvider>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <button className="text-purple-600 hover:text-purple-700">
-              <HelpCircle className="h-3 w-3" />
-            </button>
-          </TooltipTrigger>
-          <TooltipContent>
-            <p className="text-sm">Porcentaje (%) o monto fijo ($) de descuento</p>
-          </TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
-    </div>
-    <Select
-      value={editingPromotion ? editingPromotion.type : newPromotion.type}
-      onValueChange={(value: "percentage" | "fixed") =>
-        editingPromotion
-          ? setEditingPromotion({ ...editingPromotion, type: value })
-          : setNewPromotion({ ...newPromotion, type: value })
-      }
-    >
-      <SelectTrigger>
-        <SelectValue />
-      </SelectTrigger>
-      <SelectContent>
-        <SelectItem value="percentage">Porcentaje (%)</SelectItem>
-        <SelectItem value="fixed">Monto Fijo ($)</SelectItem>
-      </SelectContent>
-    </Select>
+<div>
+  <div className="flex items-center gap-2 mb-2">
+    <Label htmlFor="type">Tipo de Descuento</Label>
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button className="text-purple-600 hover:text-purple-700">
+            <HelpCircle className="h-3 w-3" />
+          </button>
+        </TooltipTrigger>
+        <TooltipContent>
+          <p className="text-sm">Porcentaje (%) o monto fijo ($) de descuento</p>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
   </div>
-  <div>
-    <div className="flex items-center gap-2 mb-2">
-      <Label htmlFor="discount">Descuento</Label>
-      <TooltipProvider>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <button className="text-purple-600 hover:text-purple-700">
-              <HelpCircle className="h-3 w-3" />
-            </button>
-          </TooltipTrigger>
-          <TooltipContent>
-            <p className="text-sm">Valor del descuento (ej: 20% o $50)</p>
-          </TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
-    </div>
+  <Select
+    value={editingPromotion ? editingPromotion.type : newPromotion.type}
+    onValueChange={(value: "percentage" | "fixed") =>
+      editingPromotion
+        ? setEditingPromotion({ ...editingPromotion, type: value })
+        : setNewPromotion({ ...newPromotion, type: value })
+    }
+  >
+    <SelectTrigger>
+      <SelectValue />
+    </SelectTrigger>
+    <SelectContent>
+      <SelectItem value="percentage">Porcentaje (%)</SelectItem>
+      <SelectItem value="fixed">Monto Fijo ($)</SelectItem>
+    </SelectContent>
+  </Select>
+</div>
+
+<div>
+  <div className="flex items-center gap-2 mb-2">
+    <Label htmlFor="discount">Descuento</Label>
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button className="text-purple-600 hover:text-purple-700">
+            <HelpCircle className="h-3 w-3" />
+          </button>
+        </TooltipTrigger>
+        <TooltipContent>
+          <p className="text-sm">
+            {(editingPromotion?.type || newPromotion.type) === 'percentage'
+              ? 'Valor del descuento (ej: 20 para 20%)'
+              : 'Monto del descuento (ej: 50 para $50)'}
+          </p>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  </div>
+  <div className="relative">
     <Input
       id="discount"
-      placeholder="Ej: 20% o $50"
-      value={editingPromotion ? editingPromotion.discount : newPromotion.discount}
-      onChange={(e) =>
+      type="number"
+      placeholder={(editingPromotion?.type || newPromotion.type) === 'percentage' ? '20' : '50'}
+      value={extractDiscountValue(editingPromotion ? editingPromotion.discount : newPromotion.discount)}
+      onChange={(e) => {
+        const value = e.target.value;
+        const symbol = (editingPromotion?.type || newPromotion.type) === 'percentage' ? '%' : '$';
+        const formattedValue = value ? `${value}${symbol}` : '';
+        
         editingPromotion
-          ? setEditingPromotion({ ...editingPromotion, discount: e.target.value })
-          : setNewPromotion({ ...newPromotion, discount: e.target.value })
-      }
+          ? setEditingPromotion({ ...editingPromotion, discount: formattedValue })
+          : setNewPromotion({ ...newPromotion, discount: formattedValue })
+      }}
+      className="pr-8"
     />
+    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500">
+      {(editingPromotion?.type || newPromotion.type) === 'percentage' ? '%' : '$'}
+    </span>
   </div>
+</div>
   <div>
     <div className="flex items-center gap-2 mb-2">
       <Label htmlFor="minPurchase">Compra Mínima ($)</Label>
@@ -1606,7 +1665,7 @@ case "promociones":
     <TableBody>
       {filteredPromotions.length > 0 ? (
         filteredPromotions.map((promo) => (
-          <TableRow key={promo.id}>
+<TableRow key={promo.id?.toString() || `promo-${Math.random()}`}>
             <TableCell>
               <div>
                 <p className="font-medium">{promo.name}</p>
@@ -1617,7 +1676,7 @@ case "promociones":
               {promo.categoriaId ? (
                 (() => {
                   const categoria = categoriasInventario.find(
-                    (c) => c.categoriaId === promo.categoriaId
+                    (c) => c.id === promo.categoriaId
                   );
                   return (
                     <span
@@ -1659,10 +1718,11 @@ case "promociones":
          )}
           </TableCell>
 
-            <TableCell className="text-gray-600">
-              {promo.minPurchase ? `$${promo.minPurchase}` : 'N/A'}
-            </TableCell>
-            
+          <TableCell className="text-gray-600">
+  {promo.minPurchase != null && promo.minPurchase > 0 
+    ? `$${promo.minPurchase}` 
+    : 'Sin mínimo'}
+</TableCell>
             <TableCell>{promo.startDate}</TableCell>
             <TableCell>{promo.endDate}</TableCell>
             
@@ -1702,8 +1762,8 @@ case "promociones":
                     ? "bg-purple-600 hover:bg-purple-700"
                     : "bg-blue-800 hover:bg-blue-900 text-white"
                 }
-                onClick={() => handleTogglePromotionStatus(promo.id)}
-              >
+                onClick={() => promo.id && handleTogglePromotionStatus(promo.id)}
+                >
                 {promo.status === "active" ? (
                   <Power className="h-4 w-4 mr-1" />
                 ) : (
@@ -1889,6 +1949,42 @@ case "promociones":
                         </div>
                       )}
 
+<div>
+                  <Label htmlFor='promocionSelect'>Promocion Vinculada</Label>
+                  <Select
+                    value={
+                      editingCoupon
+                      ? editingCoupon.promocionId?.toString() || "none"
+                      : newCoupon.promocionId?.toString() || "none"
+                    }
+                    onValueChange={(value) => {
+                      if(editingCoupon){
+                        setEditingCoupon({ ...editingCoupon, promocionId: parseInt(value) })
+                      } else {
+                        setNewCoupon({ ...newCoupon, promocionId: parseInt(value) })
+                      }
+                    }}
+                    >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Seleccionar promoción" />
+                    </SelectTrigger>  
+                    <SelectContent>
+                      {promociones.length > 0 ? (
+                        promociones.map((promo) => (
+                          <SelectItem key={promo.id} value={promo.id.toString()}>
+                            {promo.name}
+                          </SelectItem>
+                        ))
+                      ) : (
+                        <SelectItem disabled value=''>
+                          No hay promociones disponibles
+                        </SelectItem>
+                      )}    
+                    </SelectContent>
+                  </Select>
+                </div>
+
+
                       <div>
                         <div className="flex items-center gap-2 mb-2">
                           <Label htmlFor="couponMainCategory">Categoría Principal</Label>
@@ -1907,107 +2003,44 @@ case "promociones":
                             </Tooltip>
                           </TooltipProvider>
                         </div>
+
                         <Select
                           value={selectedMainCategory}
                           onValueChange={(value) => {
                             setSelectedMainCategory(value)
                             setSelectedSubCategory("")
                             setSelectedSubSubCategory("")
-                            const fullCategory = value
-                            if (editingCoupon) {
-                              setEditingCoupon({ ...editingCoupon, categoria: fullCategory })
-                            } else {
-                              setNewCoupon({ ...newCoupon, categoria: fullCategory })
-                            }
-                          }}
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Seleccionar categoría principal" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {Object.keys(categoryHierarchy).map((cat) => (
-                              <SelectItem key={cat} value={cat}>
-                                {cat}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </div>
+                            const categoriaId = Number(value) // Convertir a número
+    if (editingCoupon) {
+      setEditingCoupon({ ...editingCoupon, categoriaId })
+    } else {
+      setNewCoupon({ ...newCoupon, categoriaId })
+    }
+  }}
+>
+      <SelectTrigger>
+    <SelectValue placeholder="Seleccionar categoría" />
+  </SelectTrigger>
+  <SelectContent>
+    {categoriasInventario.map((cat) => (
+      <SelectItem key={cat.categoriaId} value={cat.categoriaId.toString()}>
+        {cat.nombre}
+      </SelectItem>
+    ))}
+  </SelectContent>
+</Select>
+  </div>
+</div>
 
-                    {selectedMainCategory && (
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <Label htmlFor="couponSubCategory">Subcategoría</Label>
-                          <Select
-                            value={selectedSubCategory}
-                            onValueChange={(value) => {
-                              setSelectedSubCategory(value)
-                              setSelectedSubSubCategory("")
-                              const fullCategory = `${selectedMainCategory} > ${value}`
-                              if (editingCoupon) {
-                                setEditingCoupon({ ...editingCoupon, categoria: fullCategory })
-                              } else {
-                                setNewCoupon({ ...newCoupon, categoria: fullCategory })
-                              }
-                            }}
-                          >
-                            <SelectTrigger>
-                              <SelectValue placeholder="Seleccionar subcategoría" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {Object.keys(
-                                categoryHierarchy[selectedMainCategory as keyof typeof categoryHierarchy],
-                              ).map((subCat) => (
-                                <SelectItem key={subCat} value={subCat}>
-                                  {subCat}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
+{(editingCoupon?.categoriaId || newCoupon.categoriaId) && (
+  <div className="p-3 bg-purple-50 rounded-lg border border-purple-200">
+    <p className="text-sm text-gray-600">Categoría seleccionada:</p>
+    <p className="font-semibold text-purple-700">
+      {categoriasInventario.find(c => c.categoriaId === (editingCoupon?.categoriaId || newCoupon.categoriaId))?.nombre}
+    </p>
+  </div>
+)}
 
-                        {selectedSubCategory && (
-                          <div>
-                            <Label htmlFor="couponSubSubCategory">Categoría Específica</Label>
-                            <Select
-                              value={selectedSubSubCategory}
-                              onValueChange={(value) => {
-                                setSelectedSubSubCategory(value)
-                                const fullCategory = `${selectedMainCategory} > ${selectedSubCategory} > ${value}`
-                                if (editingCoupon) {
-                                  setEditingCoupon({ ...editingCoupon, categoria: fullCategory })
-                                } else {
-                                  setNewCoupon({ ...newCoupon, categoria: fullCategory })
-                                }
-                              }}
-                            >
-                              <SelectTrigger>
-                                <SelectValue placeholder="Seleccionar categoría específica" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {categoryHierarchy[selectedMainCategory as keyof typeof categoryHierarchy][
-                                  selectedSubCategory as keyof (typeof categoryHierarchy)[keyof typeof categoryHierarchy]
-                                ].map((subSubCat: string) => (
-                                  <SelectItem key={subSubCat} value={subSubCat}>
-                                    {subSubCat}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    {(selectedMainCategory || (editingCoupon && editingCoupon.categoria)) && (
-                      <div className="p-3 bg-purple-50 rounded-lg border border-purple-200">
-                        <p className="text-sm text-gray-600">Categoría seleccionada:</p>
-                        <p className="font-semibold text-purple-700">
-                          {editingCoupon ? editingCoupon.categoria : newCoupon.categoria}
-                        </p>
-                      </div>
-                    )}
 
                     <div>
                       <div className="flex items-center gap-2 mb-2">
@@ -2211,11 +2244,11 @@ case "promociones":
                         <Input
                           id="startDate"
                           type="date"
-  value={editingPromotion ? editingPromotion.startDate : newPromotion.startDate}
+  value={editingCoupon ? editingCoupon.fecha_inicio : newCoupon.fecha_inicio}
   onChange={(e) =>
-    editingPromotion
-      ? setEditingPromotion({ ...editingPromotion, startDate: e.target.value })
-      : setNewPromotion({ ...newPromotion, startDate: e.target.value })
+    editingCoupon
+      ? setEditingCoupon({ ...editingCoupon, fecha_inicio: e.target.value })
+      : setNewCoupon({ ...newCoupon, fecha_inicio: e.target.value })
   }
 />
                       </div>
@@ -2238,11 +2271,11 @@ case "promociones":
                         <Input
                           id="expiryDate"
                           type="date"
-  value={editingPromotion ? editingPromotion.startDate : newPromotion.startDate}
+  value={editingCoupon ? editingCoupon.fecha_fin : newCoupon.fecha_fin}
   onChange={(e) =>
-    editingPromotion
-      ? setEditingPromotion({ ...editingPromotion, startDate: e.target.value })
-      : setNewPromotion({ ...newPromotion, startDate: e.target.value })
+    editingCoupon
+      ? setEditingCoupon({ ...editingCoupon, fecha_fin: e.target.value })
+      : setNewCoupon({ ...newCoupon, fecha_fin: e.target.value })
   }
 />
                       </div>
@@ -2280,77 +2313,6 @@ case "promociones":
                             : setNewCoupon({ ...newCoupon, isStackable: checked })
                         }
                       />
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <div className="flex items-center gap-2 mb-2">
-                          <Label htmlFor="applicableProducts">Productos Aplicables</Label>
-                          <TooltipProvider>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <button className="text-purple-600 hover:text-purple-700">
-                                  <HelpCircle className="h-3 w-3" />
-                                </button>
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                <p className="text-sm">
-                                  Lista de IDs de productos específicos a los que aplica este cupón
-                                </p>
-                              </TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
-                        </div>
-                        <Textarea
-                          id="applicableProducts"
-                          placeholder="IDs separados por comas (ej: 101, 102, 103)"
-                          value={
-                            editingCoupon ? editingCoupon.applicableProducts.join(",") : newCoupon.applicableProducts
-                          }
-                          onChange={(e) =>
-                            editingCoupon
-                              ? setEditingCoupon({
-                                  ...editingCoupon,
-                                  applicableProducts: e.target.value.split(",").map((p) => p.trim()),
-                                })
-                              : setNewCoupon({ ...newCoupon, applicableProducts: e.target.value })
-                          }
-                          rows={2}
-                        />
-                        <p className="text-xs text-gray-500 mt-1">Dejar vacío para todos los productos</p>
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-2 mb-2">
-                          <Label htmlFor="excludedProducts">Productos Excluidos</Label>
-                          <TooltipProvider>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <button className="text-purple-600 hover:text-purple-700">
-                                  <HelpCircle className="h-3 w-3" />
-                                </button>
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                <p className="text-sm">Lista de IDs de productos que están excluidos de este cupón</p>
-                              </TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
-                        </div>
-                        <Textarea
-                          id="excludedProducts"
-                          placeholder="IDs separados por comas (ej: 201, 202, 203)"
-                          value={editingCoupon ? editingCoupon.excludedProducts.join(", ") : newCoupon.excludedProducts}
-                          onChange={(e) =>
-                            editingCoupon
-                              ? setEditingCoupon({
-                                  ...editingCoupon,
-                                  excludedProducts: e.target.value.split(",").map((p) => p.trim()),
-                                })
-                              : setNewCoupon({ ...newCoupon, excludedProducts: e.target.value })
-                          }
-                          rows={2}
-                        />
-                        <p className="text-xs text-gray-500 mt-1">Productos que no aplican al cupón</p>
-                      </div>
                     </div>
 
                     <Button
@@ -2427,6 +2389,7 @@ case "promociones":
                 <TableHeader>
                   <TableRow>
                     <TableHead>Código</TableHead>
+                    <TableHead>Promo Vinculada</TableHead>
                     <TableHead>Categoría</TableHead>
                     <TableHead>Descuento</TableHead>
                     <TableHead>Límites</TableHead>
@@ -2452,10 +2415,44 @@ case "promociones":
                           </div>
                         </TableCell>
                         <TableCell>
-                          <span className="px-2 py-1 bg-purple-100 text-purple-700 rounded-full text-xs">
-                            {coupon.categoria}
-                          </span>
-                        </TableCell>
+  {coupon.promocionId ? (
+    (() => {
+      const promo = promociones.find((p) => p.id === coupon.promocionId);
+      return promo ? (
+        <Badge variant="outline" className="text-xs bg-green-100 text-green-700">
+          {promo.nombre || promo.name || `Promo #${promo.id}`}
+        </Badge>
+      ) : (
+        <Badge variant="outline" className="text-xs bg-gray-200 text-gray-500">
+          Promo #{coupon.promocionId}
+        </Badge>
+      );
+    })()
+  ) : (
+    <span className="text-gray-400 text-xs">No vinculada</span>
+  )}
+</TableCell>
+
+<TableCell>
+  {coupon.categoriaId ? (
+    (() => {
+      const categoria = categoriasInventario.find((c) => c.id === coupon.categoriaId);
+      return categoria ? (
+        <span className="px-2 py-1 bg-purple-100 text-purple-700 rounded-full text-xs">
+          {categoria.nombre || categoria.name}
+        </span>
+      ) : (
+        <span className="px-2 py-1 bg-gray-200 text-gray-500 rounded-full text-xs">
+          Categoría #{coupon.categoriaId}
+        </span>
+      );
+    })()
+  ) : (
+    <span className="text-gray-400 text-xs">Sin categoría asignada</span>
+  )}
+</TableCell>
+
+            
                         <TableCell className="text-purple-600 font-semibold">{coupon.discount}</TableCell>
                         <TableCell>
                           <div className="text-xs space-y-1">
@@ -2467,7 +2464,7 @@ case "promociones":
                         <TableCell>
                           <div className="text-xs space-y-1">
                             <div>{coupon.startDate}</div>
-                            <div>{coupon.expiryDate}</div>
+                            <div>{coupon.endDate}</div>
                           </div>
                         </TableCell>
                         <TableCell>
