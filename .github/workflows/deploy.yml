@@ -29,7 +29,7 @@ jobs:
 
       - name: 3. Build del Frontend (Genera 'dist')
         run: |
-          cd admin-panel v2/frontend # <-- RUTA AJUSTADA
+          cd "admin-panel v2/frontend" # <-- ¡CORREGIDO: RUTAS ENTRE COMILLAS!
           npm install
           npm run build # Esto debe generar la carpeta 'dist' dentro de 'frontend/'
 
@@ -41,7 +41,7 @@ jobs:
           username: ${{ env.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           # Copia el CONTENIDO de la carpeta 'dist' a la ruta de destino
-          source: "admin-panel v2/frontend/dist/*" # <-- RUTA AJUSTADA
+          source: "admin-panel v2/frontend/dist/*" # <-- ¡CORREGIDO: RUTAS ENTRE COMILLAS!
           target: "${{ env.FRONTEND_PATH }}"
 
       # --- PASO DE DESPLIEGUE: BACKEND (SSH para comandos remotos) ---
