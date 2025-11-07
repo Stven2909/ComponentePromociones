@@ -19,20 +19,24 @@ jobs:
     - name: 1. Checkout del Código
       uses: actions/checkout@v4
 
+    # 🔍 Paso agregado para inspeccionar estructura del repo
+    - name: 2. Ver estructura del repositorio
+      run: ls -R
+
     # --- CONFIGURACIÓN DEL ENTORNO DE COMPILACIÓN ---
-    - name: 2. Setup Node.js para Frontend Build
+    - name: 3. Setup Node.js para Frontend Build
       uses: actions/setup-node@v4
       with:
         node-version: '20'
 
-    - name: 3. Build del Frontend (React en admin-panel/app)
+    - name: 4. Build del Frontend (React en admin-panel/app)
       run: |
         cd admin-panel/app
         npm install
         npm run build
 
     # --- DESPLIEGUE DEL FRONTEND ---
-    - name: 4. Subir Frontend compilado al VPS
+    - name: 5. Subir Frontend compilado al VPS
       uses: appleboy/scp-action@v0.1.4
       with:
         host: ${{ env.VPS_HOST }}
@@ -42,7 +46,7 @@ jobs:
         target: "${{ env.FRONTEND_PATH }}"
 
     # --- DESPLIEGUE DEL BACKEND Y REINICIO ---
-    - name: 5. Despliegue del Backend y reinicio
+    - name: 6. Despliegue del Backend y reinicio
       uses: appleboy/ssh-action@v1.0.3
       with:
         host: ${{ env.VPS_HOST }}
